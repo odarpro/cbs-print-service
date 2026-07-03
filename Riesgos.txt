@@ -1,0 +1,11 @@
+El servicio depende de tres capas, cada una con su propio riesgo:
+
+1. Node.js runtime — Bajo riesgo. Node.js 18+ tiene soporte LTS hasta 2028. Si en el futuro deja de ejecutarse en Windows, bastaría con actualizar Node.js.
+2. @thiagoelg/node-printer — Riesgo medio. Es un paquete comunitario que hace llamadas directas a la API Winspool de Windows. Si el mantenedor lo abandona 
+   o una actualización de Windows rompe la API (muy raro en Winspool, lleva décadas estable), el servicio dejaría de funcionar. Mitigación: el código ya captura 
+   su ausencia con try/catch y da error claro.
+3. Winspool API — Riesgo muy bajo. Es parte del núcleo de Windows desde los 90 y Microsoft garantiza retrocompatibilidad. Una actualización normal de Windows no la romperá.
+   Recomendación para evolucionar: si @thiagoelg/node-printer queda obsoleto, migrar a imprimir directamente con fs.createWriteStream al puerto LPT compartido o usar Edge.js 
+   para invocar C# (System.Drawing.Printing). Ambas opciones siguen sin depender de cmd.exe.
+
+En resumen: el servicio es estable para años. El único punto frágil es la dependencia nativa de terceros, pero tienes rutas de escape claras.

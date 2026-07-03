@@ -1,0 +1,187 @@
+﻿'use strict';
+// =============================================================================
+// printer.js  –  CBS Print Service
+//
+// Envía archivos de texto a impresoras matriciales usando ÚNICAMENTE la API
+// Win32 a través del módulo nativo de Node.js (PDC – Printer Data Channel).
+//
+// Método empleado: WriteFile directo al puerto del spooler de Windows.
+//   1. Se abre el trabajo de impresión con OpenPrinter / StartDocPrinter /
+//      StartPagePrinter (Win32 Winspool API).
+//   2. Se escribe el contenido del archivo byte a byte con WritePrinter.
+//   3. Se cierra con EndPagePrinter / EndDocPrinter / ClosePrinter.
+//
+// Esto NO invoca cmd.exe, powershell.exe, ShellExecute ni ningún proceso
+// externo  — cumple el requisito de Auditoría.
+//
+// Compatibilidad: Windows 10 / Windows 11, Node.js >= 18 LTS.
+//
+// Dependencia nativa requerida:
+//   npm install @thiagoelg/node-printer
+//   (único paquete que expone Winspool directamente sin shell)
+// =============================================================================
+
+const fs     = require('fs');
+const path   = require('path');
+const logger = require('./logger');
+
+// ---------------------------------------------------------------------------
+// Carga del módulo nativo.
+// Si no está instalado se usa el stub para entornos de desarrollo/CI Linux.
+// ---------------------------------------------------------------------------
+let nativePrinter;
+try {
+  nativePrinter = require('@thiagoelg/node-printer');
+} catch (e) {
+  // En Linux/CI el módulo nativo no compila; usamos stub para pruebas unitarias.
+  nativePrinter = null;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers internos
+// ---------------------------------------------------------------------------
+
+/**
+ * Resuelve el nombre completo de una impresora instalada buscando
+ * coincidencia parcial (insensible a mayúsculas), igual que el VB original.
+ * @param {string} partialName
+ * @returns {string|null}
+ */
+function resolveInstalledPrinterName(partialName) {
+  if (!nativePrinter) return null; // no podemos resolver sin el módulo nativo
+
+  const installed = nativePrinter.getPrinters();        // [{name, …}]
+  const needle    = partialName.toUpperCase();
+
+  for (const p of installed) {
+    if (p.name.toUpperCase().includes(needle)) {
+      return p.name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Verifica que la impresora exista y no esté offline.
+ * @param {string} printerName  Nombre resuelto
+ * @returns {{ ok: boolean, reason: string }}
+ */
+function checkPrinterStatus(printerName) {
+  if (!nativePrinter) return { ok: false, reason: 'Módulo nativo de impresión no disponible.' };
+
+  const printers = nativePrinter.getPrinters();
+  const found    = printers.find(p => p.name === printerName);
+
+  if (!found) {
+    return { ok: false, reason: `Impresora "${printerName}" no encontrada en el sistema.` };
+  }
+
+  // statusNumber: 0 = OK, otros valores indican estado de error/offline
+  // Ref: https://docs.microsoft.com/en-us/windows/win32/printdocs/printer-info-2
+  const OFFLINE = 0x00000080; // PRINTER_STATUS_OFFLINE  (128)
+  const ERROR   = 0x00000002; // PRINTER_STATUS_ERROR    (2)
+  const PAPER   = 0x00000020; // PRINTER_STATUS_PAPER_OUT (32)
+
+  const status = found.statusNumber || 0;
+
+  if (status & OFFLINE) return { ok: false, reason: 'Impresora offline.' };
+  if (status & ERROR)   return { ok: false, reason: 'Impresora en estado de error.' };
+  if (status & PAPER)   return { ok: false, reason: 'Impresora sin papel.' };
+
+  return { ok: true, reason: 'OK' };
+}
+
+// ---------------------------------------------------------------------------
+// API pública
+// ---------------------------------------------------------------------------
+
+/**
+ * Imprime un archivo de texto en la impresora indicada usando Winspool (Win32).
+ * No invoca ningún proceso externo.
+ *
+ * @param {object} opts
+ *   opts.filePath      {string}  Ruta completa del archivo .txt
+ *   opts.printerName   {string}  Nombre parcial o completo de la impresora
+ *   opts.fileEncoding  {string}  Codificación del archivo (default 'latin1')
+ *   opts.copies        {number}  Número de copias (default 1)
+ *   opts.docTitle      {string}  Título del trabajo de impresión (opcional)
+ *
+ * @returns {Promise<void>}  Resuelve si éxito, rechaza con Error si fallo.
+ */
+async function printFile(opts) {
+  const {
+    filePath,
+    printerName,
+    fileEncoding = 'latin1',
+    copies       = 1,
+    docTitle     = path.basename(filePath)
+  } = opts;
+
+  const log = logger.get();
+
+  // 1. Verificar que el archivo exista
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Archivo no encontrado: ${filePath}`);
+  }
+
+  // 2. Resolver nombre real de impresora
+  const resolvedName = resolveInstalledPrinterName(printerName);
+  if (!resolvedName) {
+    throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
+  }
+
+  // 3. Verificar estado de la impresora
+  const status = checkPrinterStatus(resolvedName);
+  if (!status.ok) {
+    throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
+  }
+
+  log.debug('Iniciando impresión', { filePath, resolvedName, copies });
+
+  // 4. Leer contenido del archivo
+  const content = fs.readFileSync(filePath, { encoding: fileEncoding });
+  // Convertir a Buffer con la codificación correcta para Winspool
+  const dataBuffer = Buffer.from(content, fileEncoding);
+
+  if (!nativePrinter) {
+    // Entorno de desarrollo/CI (Linux): simular éxito
+    log.warn('Módulo nativo no disponible (entorno no-Windows). Simulando impresión.', { filePath });
+    return;
+  }
+
+  // 5. Enviar al spooler mediante Winspool API (sin procesos externos)
+  //    node-printer.printDirect() llama internamente a:
+  //      OpenPrinter → StartDocPrinter → StartPagePrinter →
+  //      WritePrinter (×copies) → EndPagePrinter → EndDocPrinter → ClosePrinter
+  await new Promise((resolve, reject) => {
+    for (let i = 0; i < copies; i++) {
+      nativePrinter.printDirect({
+        data:       dataBuffer,
+        printer:    resolvedName,
+        docname:    `${docTitle} (copia ${i + 1}/${copies})`,
+        type:       'RAW',          // Envío RAW preserva el formato exacto del archivo
+        success:    () => {
+          log.info('Copia enviada al spooler', { copia: i + 1, copies, resolvedName });
+          if (i === copies - 1) resolve();
+        },
+        error:      (err) => reject(new Error(`Error en copia ${i + 1}: ${err}`))
+      });
+    }
+  });
+
+  log.info('Impresión completada', { filePath, resolvedName, copies });
+}
+
+/**
+ * Lista las impresoras instaladas en el equipo (para diagnóstico).
+ * @returns {Array<{name: string, status: string}>}
+ */
+function listPrinters() {
+  if (!nativePrinter) return [];
+  return nativePrinter.getPrinters().map(p => ({
+    name:   p.name,
+    status: p.statusNumber === 0 ? 'OK' : `status=${p.statusNumber}`
+  }));
+}
+
+module.exports = { printFile, listPrinters, resolveInstalledPrinterName };

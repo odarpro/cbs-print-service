@@ -1,0 +1,57 @@
+﻿@echo off
+:: =============================================================================
+:: uninstall.bat  -  CBS Print Service
+:: Desinstala el Servicio de Windows y elimina los archivos de la aplicacion.
+:: REQUIERE ejecutar como Administrador.
+:: =============================================================================
+
+setlocal
+
+title CBS Print Service - Desinstalador
+
+echo.
+echo ============================================================
+echo  CBS Print Service  -  Desinstalador
+echo ============================================================
+echo.
+
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Requiere privilegios de Administrador.
+    pause
+    exit /b 1
+)
+
+set INSTALL_DIR=C:\CBS\PrintService
+
+echo Se eliminara el servicio y los archivos en:
+echo   %INSTALL_DIR%
+echo.
+set /p CONFIRM=Confirmar desinstalacion? (S/N): 
+if /i "%CONFIRM%" neq "S" (
+    echo Operacion cancelada.
+    pause
+    exit /b 0
+)
+
+echo.
+echo [1/2] Eliminando servicio de Windows...
+cd /d "%INSTALL_DIR%"
+node scripts\uninstall-service.js
+
+echo.
+echo [2/2] Eliminando archivos de aplicacion...
+echo       (Los logs y configuracion seran preservados en %INSTALL_DIR%\Logs)
+rmdir /S /Q "%INSTALL_DIR%\src"          2>nul
+rmdir /S /Q "%INSTALL_DIR%\scripts"      2>nul
+rmdir /S /Q "%INSTALL_DIR%\node_modules" 2>nul
+del   /Q    "%INSTALL_DIR%\package.json" 2>nul
+del   /Q    "%INSTALL_DIR%\package-lock.json" 2>nul
+
+echo.
+echo ============================================================
+echo  Desinstalacion completada.
+echo  Los logs han sido preservados en: %INSTALL_DIR%\Logs
+echo ============================================================
+echo.
+pause

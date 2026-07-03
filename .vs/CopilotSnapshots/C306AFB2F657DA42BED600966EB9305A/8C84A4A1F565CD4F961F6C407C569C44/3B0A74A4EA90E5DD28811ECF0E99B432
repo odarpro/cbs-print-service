@@ -1,0 +1,126 @@
+﻿@echo off
+:: =============================================================================
+:: install.bat  -  CBS Print Service
+:: Instalador completo del Servicio de Impresion Directa
+::
+:: REQUIERE ejecutar como Administrador.
+:: =============================================================================
+
+setlocal enabledelayedexpansion
+
+title CBS Print Service - Instalador
+
+echo.
+echo ============================================================
+echo  CBS Print Service  v1.0.0  -  Instalador
+echo ============================================================
+echo.
+
+:: ── Verificar privilegios de administrador ───────────────────────────────────
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Este instalador requiere privilegios de Administrador.
+    echo         Haga clic derecho sobre install.bat y elija "Ejecutar como administrador".
+    echo.
+    pause
+    exit /b 1
+)
+
+:: ── Ruta de instalacion ──────────────────────────────────────────────────────
+set INSTALL_DIR=C:\CBS\PrintService
+set SOURCE_DIR=%~dp0
+
+echo Directorio fuente   : %SOURCE_DIR%
+echo Directorio destino  : %INSTALL_DIR%
+echo.
+
+:: ── Verificar Node.js ────────────────────────────────────────────────────────
+echo [1/5] Verificando Node.js...
+where node >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Node.js no esta instalado o no esta en el PATH.
+    echo         Descargue e instale Node.js LTS desde: https://nodejs.org
+    echo.
+    pause
+    exit /b 1
+)
+for /f "tokens=*" %%v in ('node -v') do set NODE_VER=%%v
+echo        Node.js encontrado: %NODE_VER%  [OK]
+echo.
+
+:: ── Crear directorio de instalacion ─────────────────────────────────────────
+echo [2/5] Creando directorio de instalacion...
+if not exist "%INSTALL_DIR%" (
+    mkdir "%INSTALL_DIR%"
+    echo        Creado: %INSTALL_DIR%
+) else (
+    echo        Ya existe: %INSTALL_DIR%
+)
+
+:: ── Copiar archivos ──────────────────────────────────────────────────────────
+echo.
+echo [3/5] Copiando archivos...
+xcopy /E /I /Y "%SOURCE_DIR%src"          "%INSTALL_DIR%\src\"        >nul
+xcopy /E /I /Y "%SOURCE_DIR%scripts"      "%INSTALL_DIR%\scripts\"    >nul
+copy  /Y        "%SOURCE_DIR%package.json" "%INSTALL_DIR%\"           >nul
+
+:: Copiar config solo si no existe (preservar configuracion previa)
+if not exist "%INSTALL_DIR%\config.json" (
+    copy /Y "%SOURCE_DIR%config.json" "%INSTALL_DIR%\" >nul
+    echo        config.json copiado (nuevo).
+) else (
+    echo        config.json existente preservado.
+)
+
+echo        Archivos copiados.  [OK]
+
+:: ── Crear carpetas configuradas en config.json (watch/history/error/log) ----
+echo.
+echo [4/6] Creando carpetas configuradas (watch/history/error/log)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '%INSTALL_DIR%\config.json') { try { $c=Get-Content -Raw -Path '%INSTALL_DIR%\config.json' | ConvertFrom-Json; $dirs=@($c.watchFolder,$c.historyFolder,$c.errorFolder,$c.logFolder); foreach($d in $dirs){ if($d -and -not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null; Write-Host ('        Creado: ' + $d) } else { if($d) { Write-Host ('        Ya existe: ' + $d) } } } } catch { Write-Host '        WARNING: No se pudo leer config.json: ' + $_.Exception.Message } } else { Write-Host '        config.json no encontrado en %INSTALL_DIR%' }"
+
+:: ── Instalar dependencias npm ────────────────────────────────────────────────
+echo.
+echo [5/6] Instalando dependencias npm...
+cd /d "%INSTALL_DIR%"
+call npm install --omit=dev >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Fallo la instalacion de dependencias npm.
+    echo         Verifique la conexion a internet o el repositorio npm interno.
+    pause
+    exit /b 1
+)
+echo        Dependencias instaladas.  [OK]
+
+:: ── Poblar config.json con impresora por defecto si está vacía -------------
+echo.
+echo Ejecutando: node scripts\populate-printers.js
+node scripts\populate-printers.js
+
+
+:: ── Registrar servicio Windows ───────────────────────────────────────────────
+echo.
+echo [6/6] Registrando Servicio de Windows...
+node scripts\install-service.js
+if %errorLevel% neq 0 (
+    echo [ERROR] No se pudo registrar el servicio.
+    pause
+    exit /b 1
+)
+pause
+
+:: ── Fin ──────────────────────────────────────────────────────────────────────
+echo.
+echo ============================================================
+echo  Instalacion completada exitosamente.
+echo ============================================================
+echo.
+echo  Servicio : CBSPrintService
+echo  Inicio   : Automatico (arranca con Windows)
+echo  Estado   : Revise en Administrador de Tareas > Servicios
+echo.
+echo  IMPORTANTE: Edite %INSTALL_DIR%\config.json
+echo  para configurar la carpeta de impresion y el nombre
+echo  de la impresora antes de realizar la primera prueba.
+echo.
+pause

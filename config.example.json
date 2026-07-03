@@ -1,0 +1,36 @@
+{
+  "watchFolder":         "C:\\Impresiones",
+  "historyFolder":       "C:\\Impresiones\\Historico",
+  "errorFolder":         "C:\\Impresiones\\Errores",
+  "logFolder":           "C:\\CBS\\PrintService\\Logs",
+  "logLevel":            "info",
+  "logRetentionDays":    30,
+
+  "printMethod":         "DIRECT",
+
+  "printers": {
+    "voucher": {
+      "name":            "EPSON LX-350",
+      "fontName":        "Courier New",
+      "fontSize":        9,
+      "bold":            false,
+      "maxCharsPerLine": 40,
+      "copies":          1
+    },
+    "slip": {
+      "name":            "EPSON LX-350",
+      "fontName":        "Courier New",
+      "fontSize":        9,
+      "bold":            false,
+      "maxCharsPerLine": 40,
+      "copies":          1
+    }
+  },
+
+  "fileEncoding":        "latin1",
+  "fileAction":          "MOVE",
+  "pollingIntervalMs":   1000,
+  "fileStabilizeMs":     500,
+  "retryCount":          3,
+  "retryIntervalMs":     5000
+}
