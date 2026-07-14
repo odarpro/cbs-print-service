@@ -11,10 +11,11 @@
 //   6. Mueve o elimina el archivo según configuración.
 // =============================================================================
 
-const fs      = require('fs');
-const path    = require('path');
-const logger  = require('./logger');
-const printer = require('./printer');
+const fs             = require('fs');
+const path           = require('path');
+const logger         = require('./logger');
+const printer        = require('./printer');
+const filenameParser = require('./filenameParser');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -178,35 +179,90 @@ class FileProcessor {
       return;
     }
 
-    log.info('Iniciando procesamiento', { fileName, docType });
+    // Parsear parámetros desde el nombre del archivo
+    const parsed = filenameParser.parse(filePath);
 
-    // 1. Esperar a que el archivo esté completamente escrito
-    await waitForFileStable(filePath, cfg.fileStabilizeMs || 500);
+    if (parsed) {
+      const validation = filenameParser.validate(parsed);
+      if (!validation.valid) {
+        log.warn('Parámetros inválidos en el nombre del archivo', {
+          fileName,
+          errors: validation.errors
+        });
+        this._moveToError(filePath, `Parámetros inválidos: ${validation.errors.join('; ')}`);
+        return;
+      }
+    }
 
-    // 2. Verificar archivo y validar contenido (usa try-catch en vez de TOCTOU)
+    log.info('Iniciando procesamiento', {
+      fileName,
+      docType,
+      hasParams: parsed ? parsed.hasParams : false
+    });
+
+    // 1. Determinar archivo de contenido (usa a1 si está presente, sino el archivo detectado)
+    const triggerDir = path.dirname(filePath);
+    const contentFilePath = (parsed && parsed.hasParams && parsed.params.a1)
+      ? path.resolve(triggerDir, parsed.params.a1)
+      : filePath;
+
+    // 2. Esperar a que el archivo de contenido esté completamente escrito
+    await waitForFileStable(contentFilePath, cfg.fileStabilizeMs || 500);
+
+    // 3. Verificar archivo y validar contenido
     let content;
     try {
-      content = fs.readFileSync(filePath, { encoding: cfg.fileEncoding || 'latin1' });
+      content = fs.readFileSync(contentFilePath, { encoding: cfg.fileEncoding || 'latin1' });
     } catch (e) {
-      log.warn('Archivo desapareció o no es legible antes de procesarse', { filePath, error: e.message });
+      log.warn('Archivo desapareció o no es legible antes de procesarse', { filePath: contentFilePath, error: e.message });
       return;
     }
 
     if (!content || content.trim().length === 0) {
-      log.warn('Archivo vacío, moviendo a errores', { filePath });
+      log.warn('Archivo vacío, moviendo a errores', { filePath: contentFilePath });
       this._moveToError(filePath, 'Archivo vacío');
       return;
     }
 
-    // 3. Obtener configuración de la impresora según tipo de documento
-    const printerCfg = cfg.printers[docType];
-    if (!printerCfg || !printerCfg.name) {
+    // 4. Obtener configuración base desde config.json
+    const printerCfg = cfg.printers[docType] || {};
+
+    // 5. Resolver opciones de impresión:
+    //    - Parámetros del filename tienen prioridad
+    //    - Valores de config.json como fallback
+    //    - Valores por defecto hardcodeados como último recurso
+
+    const resolvedPrinterName = (parsed && parsed.params.p1) || printerCfg.name;
+    if (!resolvedPrinterName) {
       log.error('No hay impresora configurada para el tipo de documento', { docType });
       this._moveToError(filePath, 'Sin impresora configurada');
       return;
     }
 
-    // 3. Intentar imprimir con reintentos
+    const rawMethod43 = parsed && parsed.params['43'];
+    const resolvedPrintMethod = rawMethod43
+      ? (rawMethod43.toUpperCase() === 'N' ? 'GDI' : 'DIRECT')
+      : (cfg.printMethod || 'DIRECT');
+
+    const rawBold = parsed && parsed.params.b;
+    const resolvedBold = rawBold !== undefined
+      ? (rawBold === '1')
+      : (printerCfg.bold || false);
+
+    const rawWidth = parsed && parsed.params.w1;
+    const resolvedMaxChars = rawWidth !== undefined
+      ? parseInt(rawWidth, 10)
+      : (printerCfg.maxCharsPerLine || 40);
+
+    log.debug('Opciones de impresión resueltas', {
+      printerName:  resolvedPrinterName,
+      printMethod:  resolvedPrintMethod,
+      bold:         resolvedBold,
+      maxCharsPerLine: resolvedMaxChars,
+      contentFilePath
+    });
+
+    // 6. Intentar imprimir con reintentos
     const maxRetries = cfg.retryCount    || 3;
     const retryMs    = cfg.retryIntervalMs || 5000;
     let   lastError  = null;
@@ -214,24 +270,24 @@ class FileProcessor {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         await printer.printFile({
-          filePath,
-          printerName:  printerCfg.name,
-          fileEncoding: cfg.fileEncoding || 'latin1',
-          copies:       printerCfg.copies || 1,
-          docTitle:     fileName,
+          filePath:       contentFilePath,
+          printerName:    resolvedPrinterName,
+          fileEncoding:   cfg.fileEncoding || 'latin1',
+          copies:         printerCfg.copies || 1,
+          docTitle:       fileName,
           content,
-          printMethod:  cfg.printMethod || 'DIRECT',
-          bold:         printerCfg.bold || false,
-          maxCharsPerLine: printerCfg.maxCharsPerLine || 40
+          printMethod:    resolvedPrintMethod,
+          bold:           resolvedBold,
+          maxCharsPerLine: resolvedMaxChars
         });
 
         // ── Éxito ──────────────────────────────────────────────────────
         log.info('Impresión exitosa', {
           fileName,
           docType,
-          printer:  printerCfg.name,
+          printer:  resolvedPrinterName,
           copies:   printerCfg.copies || 1,
-          modo:     cfg.printMethod || 'DIRECT',
+          modo:     resolvedPrintMethod,
           attempt
         });
 

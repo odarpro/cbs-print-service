@@ -28,7 +28,7 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 
-set INSTALL_DIR=C:\CBS\PrintService
+set INSTALL_DIR=D:\CBS\PrintService
 
 echo Se eliminara el servicio y los archivos en:
 echo   %INSTALL_DIR%

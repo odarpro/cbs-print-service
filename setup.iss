@@ -24,7 +24,7 @@ AppId                   = {{B8F4A3D2-1E5C-4A7B-9D6F-8C2E3F1A5B7D}
 AppName                 = {#MyAppName}
 AppVersion              = {#MyAppVersion}
 AppPublisher            = {#MyAppPublisher}
-DefaultDirName          = C:\CBS\PrintService
+DefaultDirName          = D:\CBS\PrintService
 DefaultGroupName        = CBS Print Service
 DisableProgramGroupPage = yes
 OutputDir               = .\dist
@@ -144,9 +144,9 @@ begin
   ConfigPage.Add('Carpeta de históricos (historyFolder):', False);
   ConfigPage.Add('Carpeta de errores (errorFolder):', False);
 
-  ConfigPage.Values[0] := 'C:\Impresiones';
-  ConfigPage.Values[1] := 'C:\Impresiones\Historico';
-  ConfigPage.Values[2] := 'C:\Impresiones\Errores';
+  ConfigPage.Values[0] := 'D:\Impresiones';
+  ConfigPage.Values[1] := 'D:\Impresiones\Historico';
+  ConfigPage.Values[2] := 'D:\Impresiones\Errores';
 end;
 
 function GetWatchFolder(Param: string): string;
@@ -154,7 +154,7 @@ begin
   if ConfigPage <> nil then
     Result := ConfigPage.Values[0]
   else
-    Result := 'C:\Impresiones';
+    Result := 'D:\Impresiones';
 end;
 
 function GetHistoryFolder(Param: string): string;
@@ -162,7 +162,7 @@ begin
   if ConfigPage <> nil then
     Result := ConfigPage.Values[1]
   else
-    Result := 'C:\Impresiones\Historico';
+    Result := 'D:\Impresiones\Historico';
 end;
 
 function GetErrorFolder(Param: string): string;
@@ -170,7 +170,7 @@ begin
   if ConfigPage <> nil then
     Result := ConfigPage.Values[2]
   else
-    Result := 'C:\Impresiones\Errores';
+    Result := 'D:\Impresiones\Errores';
 end;
 
 function JsonStr(const S: string): string;

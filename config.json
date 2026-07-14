@@ -1,8 +1,8 @@
 {
-  "watchFolder":         "C:\\Impresiones",
-  "historyFolder":       "C:\\Impresiones\\Historico",
-  "errorFolder":         "C:\\Impresiones\\Errores",
-  "logFolder":           "C:\\CBS\\PrintService\\Logs",
+  "watchFolder":         "D:\\Impresiones",
+  "historyFolder":       "D:\\Impresiones\\Historico",
+  "errorFolder":         "D:\\Impresiones\\Errores",
+  "logFolder":           "D:\\CBS\\PrintService\\Logs",
   "logLevel":            "info",
   "logRetentionDays":    30,
 
@@ -10,7 +10,7 @@
 
   "printers": {
     "voucher": {
-      "name":            "EPSON LX-350",
+      "name":            "EPSON TM-U950",
       "fontName":        "Courier New",
       "fontSize":        9,
       "bold":            false,
@@ -18,7 +18,7 @@
       "copies":          1
     },
     "slip": {
-      "name":            "EPSON LX-350",
+      "name":            "EPSON TM-U950",
       "fontName":        "Courier New",
       "fontSize":        9,
       "bold":            false,

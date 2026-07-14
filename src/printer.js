@@ -182,7 +182,7 @@ function listPrinters() {
  */
 async function printWithPowerShell(content, printerName, encoding, copies) {
   const tmpFile = path.join(
-    process.env.TEMP || process.env.TMP || 'C:\\Temp',
+    process.env.TEMP || process.env.TMP || 'D:\\Temp',
     `cbs_print_${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`
   );
   try {

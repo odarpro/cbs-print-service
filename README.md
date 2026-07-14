@@ -1,150 +1,197 @@
-# CBS Print Service — Manual Técnico
+# CBS Print Service
 
-## Descripción
-
-Servicio de Windows desarrollado en Node.js que reemplaza `CBSprint.exe` (VB).
-Monitorea una carpeta local, detecta archivos `.txt` generados por Oracle Forms
-y los envía directamente a la impresora matricial configurada **sin invocar
-`cmd.exe`, `powershell.exe` ni ningún proceso externo** (cumple requisito de Auditoría).
-
----
-
-## Flujo operativo
-
-```
-Oracle Forms (Imprime_Recibo)
-        │
-        │  genera Rec*.txt / Val*.txt
-        ▼
-  C:\Impresiones\          ← watchFolder
-        │
-        │  detectado por chokidar (fs.watch)
-        ▼
-  CBS Print Service
-        │
-        │  printDirect() → Winspool API (Win32)
-        ▼
-  Impresora matricial
-        │
-        ▼
-  C:\Impresiones\Historico\  (o eliminado si fileAction=DELETE)
-```
+Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watchFolder`, detecta archivos `Rec*.txt` / `Val*.txt` generados por Oracle Forms y los envía a una impresora matricial vía Winspool API **sin invocar cmd.exe, powershell.exe ni procesos externos** (cumple Auditoría).
 
 ---
 
 ## Requisitos
 
-| Componente | Versión mínima |
+| Componente | Versión |
 |---|---|
 | Windows | 10 / 11 (64 bits) |
 | Node.js | 18 LTS o superior |
 | npm | incluido con Node.js |
-| Impresora | Driver instalado en Windows (USB, LPT, red) |
+| Impresora | Driver instalado (USB, LPT, red) |
 
 ---
 
-## Instalación (primera vez)
+## Instalación
 
-1. Descomprimir el paquete en cualquier carpeta temporal.
-2. **Hacer clic derecho** sobre `install.bat` → **"Ejecutar como administrador"**.
-3. El instalador:
-   - Verifica Node.js
-   - Copia los archivos a `C:\CBS\PrintService\`
-   - Instala dependencias npm
-   - Registra `CBSPrintService` como Servicio de Windows (inicio automático)
-4. Editar `C:\CBS\PrintService\config.json` con los valores reales.
-5. Reiniciar el servicio:  
-   `Administrador de Tareas → pestaña Servicios → CBSPrintService → Reiniciar`
+### Manual (desde el código fuente)
+1. Ejecutar `install.bat` como **Administrador**.
+2. Copia archivos a `D:\CBS\PrintService\`, instala dependencias npm y registra el servicio `CBSPrintService` (inicio automático).
+3. Editar `D:\CBS\PrintService\config.json` con valores reales.
+4. Reiniciar el servicio desde Administrador de Tareas → Servicios.
 
----
+### Instalador distribuible (build)
+1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
+2. Genera `dist\CBSPrintService_<version>_Setup.exe`.
+3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
-## Actualización
+### Actualización
+Ejecutar `update.bat` como **Administrador**: detiene el servicio, reemplaza src/scripts/package.json, reinstala dependencias y reinicia. **config.json no se modifica**.
 
-1. **Hacer clic derecho** sobre `update.bat` → **"Ejecutar como administrador"**.
-2. El actualizador detiene el servicio, reemplaza el código y lo reinicia.  
-   **`config.json` NO es modificado.**
-
----
-
-## Desinstalación
-
-1. **Hacer clic derecho** sobre `uninstall.bat` → **"Ejecutar como administrador"**.
-2. Los logs son preservados en `C:\CBS\PrintService\Logs`.
+### Desinstalación
+Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, remueve archivos preservando Logs.
 
 ---
 
 ## Configuración (`config.json`)
 
-```jsonc
-{
-  // Carpeta donde Oracle Forms deposita los archivos .txt
-  "watchFolder":         "C:\\Impresiones",
+| Campo | Tipo | Default | Descripción |
+|---|---|---|---|
+| `watchFolder` | string | `D:\Impresiones` | Carpeta monitoreada donde Oracle Forms deposita archivos .txt |
+| `historyFolder` | string | `D:\Impresiones\Historico` | Destino de archivos impresos (cuando `fileAction: "MOVE"`) |
+| `errorFolder` | string | `D:\Impresiones\Errores` | Destino de archivos que fallaron tras todos los reintentos |
+| `logFolder` | string | `D:\CBS\PrintService\Logs` | Carpeta de logs rotativos diarios |
+| `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
+| `logRetentionDays` | number | `30` | Días de retención de archivos de log |
+| `printMethod` | string | `"DIRECT"` | Modo de impresión: `"DIRECT"` o `"GDI"` |
+| `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
+| `fileAction` | string | `"MOVE"` | Post-impresión: `"MOVE"` (a historyFolder) o `"DELETE"` |
+| `pollingIntervalMs` | number | `1000` | Intervalo de sondeo en ms para detectar archivos |
+| `fileStabilizeMs` | number | `500` | Espera de estabilización antes de procesar el archivo |
+| `retryCount` | number | `3` | Reintentos ante fallo de impresión |
+| `retryIntervalMs` | number | `5000` | Intervalo entre reintentos en ms |
 
-  // Carpeta para archivos impresos correctamente
-  "historyFolder":       "C:\\Impresiones\\Historico",
-
-  // Carpeta para archivos que fallaron tras todos los reintentos
-  "errorFolder":         "C:\\Impresiones\\Errores",
-
-  // Carpeta de logs
-  "logFolder":           "C:\\CBS\\PrintService\\Logs",
-
-  // Nivel de log: "error" | "warn" | "info" | "debug"
-  "logLevel":            "info",
-
-  // Días de retención de archivos de log
-  "logRetentionDays":    30,
-
-  "printMethod":         "DIRECT",          // "DIRECT" | "GDI"
-
-  "printers": {
-    // Configuración para Vouchers (archivos Rec*.txt)
-    "voucher": {
-      "name":            "EPSON LX-350",   // Nombre parcial de la impresora
-      "fontName":        "Courier New",    // Solo para modo GDI
-      "fontSize":        9,                // Solo para modo GDI
-      "bold":            false,            // Solo para modo GDI
-      "maxCharsPerLine": 40,               // Solo para modo GDI (word-wrap)
-      "copies":          1                 // Número de copias
-    },
-    // Configuración para Slips/Validación (archivos Val*.txt)
-    "slip": {
-      "name":            "EPSON LX-350",
-      "fontName":        "Courier New",
-      "fontSize":        9,
-      "bold":            false,
-      "maxCharsPerLine": 40,
-      "copies":          1
-    }
-  },
-
-  // Codificación del archivo: "latin1" (Windows-1252) compatible con Oracle Forms
-  "fileEncoding":        "latin1",
-
-  // Acción post-impresión: "MOVE" (mover a historyFolder) | "DELETE" (eliminar)
-  "fileAction":          "MOVE",
-
-  // Intervalo de sondeo en ms para detectar nuevos archivos (polling)
-  "pollingIntervalMs":   1000,
-
-  // Milisegundos de espera para estabilización del archivo antes de procesarlo
-  "fileStabilizeMs":     500,
-
-  // Reintentos ante impresora no disponible
-  "retryCount":          3,
-  "retryIntervalMs":     5000
-}
-```
-
-### Identificar el nombre exacto de la impresora
-
-Ejecutar el script de diagnóstico (no requiere privilegios especiales):
+### `printers` — Configuración por tipo de documento
 
 ```
-node C:\CBS\PrintService\scripts\diagnostico.js
+printers.voucher  → para archivos Rec*.txt
+printers.slip     → para archivos Val*.txt
 ```
 
-Copiará el nombre exacto de la impresora que debe usarse en `config.json`.
+| Sub-campo | Tipo | Default | Descripción |
+|---|---|---|---|
+| `name` | string | `"EPSON LX-350"` | Nombre parcial o exacto de la impresora |
+| `fontName` | string | `"Courier New"` | Solo modo GDI |
+| `fontSize` | number | `9` | Solo modo GDI |
+| `bold` | boolean | `false` | Solo modo GDI |
+| `maxCharsPerLine` | number | `40` | Solo modo GDI (word-wrap) |
+| `copies` | number | `1` | Número de copias |
+
+---
+
+## Parámetros en el nombre del archivo
+
+Oracle Forms puede incrustar parámetros en el nombre del archivo separados por `~`:
+
+```
+Rec~m0~t9~fCourier_New~b0~a1contenido.txt~p1EPSON_LX-350~w140~43S.txt
+```
+
+| Código | Parámetro | Valores | Default |
+|---|---|---|---|
+| `m` | `cMetodo` | `0`=Original, `1`=Directo | `0` |
+| `t` | `cTamañoLetra` | `1`–`72` | `9` |
+| `f` | `cNombreFont` | nombre de la fuente | `Courier_New` |
+| `b` | `cBold` | `0`=No, `1`=Sí | `0` |
+| `a1` | `cNombreArchivo` | nombre del .txt a imprimir (sin ruta) | — |
+| `p1` | `cPrinterName` | nombre de impresora destino | — |
+| `w1` | `cAnchoMaximo` | `10`–`255` | `40` |
+| `43` | `cImpresionDirecta` | `S`=Directa, `N`=GDI | `S` |
+
+Cuando un archivo incluye parámetros, estos tienen prioridad sobre `config.json`. Los nombres legacy sin `~` (ej: `Rec20260706_143022.txt`) usan solo la configuración del JSON.
+
+Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser').describeFormat()"` para ver la documentación completa del formato.
+
+---
+
+## Modos de impresión
+
+| Modo | `printMethod` | Descripción |
+|---|---|---|
+| **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `/43 S`. |
+| **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/P para negrita si `bold=true`, y envía el texto formateado. Equivale a `/43 N`. |
+
+---
+
+## Scripts del proyecto
+
+### Batch files (raíz)
+
+| Script | Admin | Descripción |
+|---|---|---|
+| `install.bat` | ✅ | Instala el servicio en `D:\CBS\PrintService`, crea carpetas, instala dependencias, registra servicio |
+| `uninstall.bat` | ✅ | Detiene, elimina el servicio y remueve archivos (preserva Logs) |
+| `update.bat` | ✅ | Detiene servicio, reemplaza código, reinstala dependencias y reinicia |
+| `status.bat` | ❌ | Muestra estado del servicio, health check y archivos pendientes |
+| `build.bat` | ✅ | Build completo: instala Node.js/Python/VS/Inno Setup, `npm install`, `npm test`, genera `dist\*.exe` |
+| `post-install.bat` | — | Ejecutado por setup.exe tras la instalación (apply-settings, populate-printers, install-service) |
+
+### Node.js scripts (`scripts/`)
+
+| Script | Descripción |
+|---|---|
+| `install-service.js` | Registra `CBSPrintService` en el SCM vía `node-windows` |
+| `uninstall-service.js` | Elimina el servicio del SCM |
+| `diagnostico.js` | Diagnóstico: muestra config, verifica carpetas, lista impresoras instaladas, archivos pendientes |
+| `populate-printers.js` | Detecta impresora por defecto y la asigna a `printers.voucher.name` / `printers.slip.name` en `config.json` |
+| `apply-settings.js` | Aplica rutas de carpetas elegidas durante setup.exe |
+| `find-node.js` / `find-node.cmd` | Localiza Node.js (system PATH o bundled portable) |
+
+### npm scripts (`package.json`)
+
+| Comando | Descripción |
+|---|---|
+| `npm start` | Ejecuta `src/index.js` en modo consola (desarrollo/diagnóstico) |
+| `npm test` | Ejecuta tests unitarios con `node --test tests/*.test.js` |
+| `npm run test:watch` | Tests en modo watch |
+| `npm run install-service` | Registra el servicio Windows |
+| `npm run uninstall-service` | Elimina el servicio Windows |
+
+---
+
+## Tests
+
+```
+npm test             # Ejecuta tests (Node.js 20+ o Node 18 con --experimental-test)
+npm run test:watch   # Modo watch
+```
+
+| Archivo | Descripción |
+|---|---|
+| `tests/filenameParser.test.js` | Parseo y validación de nombres de archivo con parámetros |
+| `tests/fileProcessor.test.js` | Cola FIFO, reintentos, post-procesamiento (MOVE/DELETE) |
+| `tests/gdiPrinter.test.js` | Word-wrap, formato GDI, códigos ESC/P |
+| `tests/printer.test.js` | Resolución de impresora, envío al spooler |
+
+---
+
+## Logs
+
+Ruta: `logFolder` configurado (default `D:\CBS\PrintService\Logs`). Rotación diaria automática, retención configurable.
+
+Formato: `[timestamp] [NIVEL] mensaje | {"meta":"json"}`
+
+| Nivel | Descripción |
+|---|---|
+| `INFO` | Detección de archivos, impresiones exitosas, movimientos |
+| `WARN` | Reintentos, archivos vacíos, advertencias |
+| `ERROR` | Fallos tras reintentos, archivos movidos a errores |
+| `DEBUG` | Detalle técnico (activar con `"logLevel": "debug"`) |
+
+---
+
+## Health Check
+
+El servicio genera `healthcheck.json` con estado en vivo (actualizado cada 30s):
+
+```json
+{"status":"active","pid":1234,"uptime":3600,"queue":0,"timestamp":"2026-07-06T12:00:00.000Z"}
+```
+
+Verificar con: `status.bat` o `type D:\CBS\PrintService\healthcheck.json`.
+
+---
+
+## Seguridad y Auditoría
+
+- Sin procesos externos: no invoca `cmd.exe`, `powershell.exe` ni `ShellExecute`
+- Impresión vía Winspool API (`WritePrinter`) — módulo nativo `@tbalegas/node-printer`
+- Servicio corre como `LocalSystem` (configurable desde SCM)
+- Fallback PowerShell solo cuando el módulo nativo no está disponible
+- Cada impresión queda registrada en logs con timestamp, archivo, impresora, modo, copias y resultado
 
 ---
 
@@ -152,54 +199,62 @@ Copiará el nombre exacto de la impresora que debe usarse en `config.json`.
 
 ```
 cbs-print-service/
-├── src/
-│   ├── index.js          ← Punto de entrada / bootstrap del servicio
-│   ├── watcher.js        ← Monitoreo de carpeta (chokidar)
-│   ├── fileProcessor.js  ← Cola FIFO, reintentos, post-proceso
-│   ├── printer.js        ← Envío a impresora vía Winspool API
-│   ├── gdiPrinter.js     ← Renderizado de texto modo GDI (word-wrap, ESC/P)
-│   └── logger.js         ← Logging con rotación diaria (winston)
-├── scripts/
-│   ├── install-service.js   ← Registra el Servicio de Windows
-│   ├── uninstall-service.js ← Elimina el Servicio de Windows
-│   ├── diagnostico.js       ← Herramienta de diagnóstico
-│   └── populate-printers.js ← Detecta impresora y actualiza config
-├── tests/                ← Tests unitarios (npm test)
+├── src/                     # Código fuente
+│   ├── index.js             # Punto de entrada / bootstrap
+│   ├── watcher.js           # Monitoreo de carpeta (chokidar)
+│   ├── fileProcessor.js     # Cola FIFO, reintentos, post-proceso
+│   ├── printer.js           # Envío a impresora vía Winspool API
+│   ├── gdiPrinter.js        # Renderizado modo GDI (word-wrap, ESC/P)
+│   ├── logger.js            # Logging rotativo (winston)
+│   └── filenameParser.js    # Parseo de parámetros en nombre de archivo
+├── scripts/                 # Scripts auxiliares
+│   ├── install-service.js
+│   ├── uninstall-service.js
+│   ├── diagnostico.js
+│   ├── populate-printers.js
+│   ├── apply-settings.js
+│   ├── find-node.js
+│   └── find-node.cmd
+├── tests/                   # Tests unitarios
+│   ├── filenameParser.test.js
 │   ├── fileProcessor.test.js
 │   ├── gdiPrinter.test.js
 │   └── printer.test.js
-├── dist/                 ← Instalador generado (build.bat)
-├── config.json           ← Configuración (NO sobreescrita en updates)
-├── config.example.json   ← Plantilla de configuración con valores de ejemplo
-├── healthcheck.json      ← Estado en vivo del servicio (generado automáticamente)
+├── dist/                    # Instalador generado (build.bat)
+├── config.json              # Configuración (NO sobreescrita en updates)
+├── config.example.json      # Plantilla de ejemplo
+├── healthcheck.json         # Estado en vivo (generado automáticamente)
 ├── package.json
-├── build.bat             ← Genera instalador (requiere Inno Setup)
-├── setup.iss             ← Script de Inno Setup para instalador
-├── BUILD.md              ← Guía de build / despliegue masivo
-├── install.bat           ← Instalador manual [Admin]
-├── uninstall.bat         ← Desinstalador manual [Admin]
-├── update.bat            ← Actualizador manual [Admin]
-├── status.bat            ← Verifica estado del servicio
+├── build.bat                # Genera instalador (requiere Inno Setup)
+├── setup.iss                # Script Inno Setup
+├── install.bat              # Instalador manual [Admin]
+├── uninstall.bat            # Desinstalador manual [Admin]
+├── update.bat               # Actualizador manual [Admin]
+├── status.bat               # Verifica estado del servicio
+├── post-install.bat         # Post-instalación (setup.exe)
+├── BUILD.md                 # Guía de build / despliegue masivo
+├── Riesgos.txt              # Análisis de riesgos del servicio
 └── README.md
 ```
 
 ---
 
-## Logs
+## Flujo operativo
 
-Los logs se encuentran en la carpeta configurada en `logFolder`.
-
-Formato de cada entrada:
 ```
-[2026-06-10 14:32:05] [INFO ] Nuevo archivo detectado | {"filePath":"C:\\Impresiones\\Rec20260610143205000001.txt"}
-[2026-06-10 14:32:06] [INFO ] Impresión exitosa | {"fileName":"Rec...txt","docType":"voucher","printer":"EPSON LX-350","copies":1,"attempt":1}
+Oracle Forms (Imprime_Recibo)
+  │ genera Rec*.txt / Val*.txt
+  ▼
+watchFolder (D:\Impresiones)
+  │ detectado por chokidar
+  ▼
+CBS Print Service
+  │ printDirect() → Winspool API (Win32)
+  ▼
+Impresora matricial
+  ▼
+historyFolder (MOVE) o eliminación (DELETE)
 ```
-
-Niveles:
-- `INFO`  — operaciones normales (detección, impresión exitosa, movimiento de archivo)
-- `WARN`  — reintentos, advertencias no críticas
-- `ERROR` — fallos de impresión tras reintentos, archivos movidos a errores
-- `DEBUG` — detalle técnico (activar cambiando `logLevel` a `"debug"`)
 
 ---
 
@@ -207,59 +262,11 @@ Niveles:
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| Servicio no arranca | config.json inválido o ruta no existe | Revisar config.json con JSON validator |
-| Archivo pasa a carpeta Errores | Impresora offline o nombre incorrecto | Ejecutar `diagnostico.js`, verificar nombre |
-| No detecta archivos nuevos | watchFolder incorrecto | Verificar ruta en config.json |
-| Error al instalar servicio | Sin privilegios de Admin | Ejecutar install.bat como Administrador |
-| Módulo nativo no compila | Build tools no instaladas | `npm install --global --production windows-build-tools` |
-
----
-
-## Modos de Impresión
-
-El servicio soporta dos modos, configurables mediante `printMethod` en `config.json`:
-
-| Modo | Valor | Descripción |
-|---|---|---|
-| **DIRECT** | `"DIRECT"` | Envía el contenido del archivo .txt directamente al spooler de Windows vía API Winspool (RAW). Equivalente al modo Directo del VB original (`/43 S`). |
-| **GDI** | `"GDI"` | Aplica word-wrap al texto según `maxCharsPerLine`, añade códigos ESC/P para negrita si `bold=true`, y envía el texto formateado a la impresora. Equivalente al modo GDI del VB original (`/43 N`). |
-
-En modo DIRECT los parámetros `fontName`, `fontSize`, `bold` y `maxCharsPerLine` son ignorados.
-
----
-
-## Health Check
-
-El servicio genera automáticamente un archivo `healthcheck.json` en el directorio de instalación con el estado en vivo:
-
-```bash
-type C:\CBS\PrintService\healthcheck.json
-```
-
-Para una verificación rápida del servicio, ejecute:
-
-```bash
-status.bat
-```
-
----
-
-## Tests
-
-Ejecutar las pruebas unitarias (requiere Node.js 20+ o Node.js 18 con flag `--experimental-test`):
-
-```bash
-npm test
-```
-
----
-
-## Seguridad y Auditoría
-
-- **Sin procesos externos**: No se invoca `cmd.exe`, `powershell.exe` ni `ShellExecute`.
-- La impresión usa directamente la API `Winspool` de Windows vía módulo nativo Node.js.
-- El servicio corre bajo la cuenta `LocalSystem` (puede cambiarse a cuenta de servicio dedicada desde el SCM).
-- Los logs de auditoría registran cada impresión con timestamp, archivo, impresora, modo, copias y resultado.
+| Servicio no arranca | config.json inválido o ruta no existe | Validar JSON, verificar carpetas |
+| Archivo pasa a Errores | Impresora offline o nombre incorrecto | `node scripts/diagnostico.js`, verificar nombre |
+| No detecta archivos | watchFolder incorrecto | Verificar ruta en config.json |
+| Error al instalar servicio | Sin privilegios de Admin | Ejecutar como Administrador |
+| Módulo nativo no compila | Build tools no instaladas | `npm install --global windows-build-tools` |
 
 ---
 
@@ -267,5 +274,5 @@ npm test
 
 | Versión | Fecha | Descripción |
 |---|---|---|
-| 1.0.0 | Junio 2026 | Versión inicial. Reemplaza CBSprint.exe (VB). |
-| 1.1.0 | Julio 2026 | Modo GDI, health check, status.bat, tests unitarios, config.example.json, pollingIntervalMs, mejoras de estabilidad. |
+| 1.0.0 | Jun 2026 | Versión inicial. Reemplaza CBSprint.exe (VB). |
+| 1.1.0 | Jul 2026 | Modo GDI, health check, status.bat, tests, config.example.json, pollingIntervalMs |
