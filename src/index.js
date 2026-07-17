@@ -14,6 +14,7 @@ const fs      = require('fs');
 const path    = require('path');
 const logger  = require('./logger');
 const watcher = require('./watcher');
+const notifier = require('./notifier');
 
 // ---------------------------------------------------------------------------
 // Cargar configuración
@@ -46,8 +47,11 @@ const config = loadConfig();
 logger.init(config);
 const log = logger.get();
 
+// Inicializar notificador toast
+notifier.init(config);
+
 log.info('============================================================');
-log.info('CBS Print Service  v1.0.0  arrancando...');
+log.info('CBS Print Service  v1.2.0  arrancando...');
 log.info('============================================================');
 log.info('Configuración cargada', { configPath: CONFIG_PATH });
 
@@ -102,11 +106,14 @@ process.on('SIGBREAK',() => shutdown('SIGBREAK'));   // Ctrl+Break en Windows
 // Capturar errores no manejados para evitar que el servicio muera silenciosamente
 process.on('uncaughtException', (err) => {
   log.error('Excepción no capturada', { error: err.message, stack: err.stack });
+  notifier.notifyCritical('Excepción no capturada', err.message);
   updateHealthCheck('error');
 });
 
 process.on('unhandledRejection', (reason) => {
-  log.error('Promise rechazada sin manejar', { reason: String(reason) });
+  const msg = String(reason);
+  log.error('Promise rechazada sin manejar', { reason: msg });
+  notifier.notifyCritical('Promise rechazada sin manejar', msg);
   updateHealthCheck('error');
 });
 

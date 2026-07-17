@@ -4,6 +4,7 @@ const path = require('path');
 
 const PARAM_DEFS = [
   { code: '43', key: 'cImpresionDirecta', desc: 'Tipo de impresión (S=Directa, N=GDI)',      defaultValue: 'S' },
+  { code: '44', key: 'cNotificacion',    desc: 'Notificación toast (S=Habilitada, N=Deshabilitada)', defaultValue: null },
   { code: 'a1', key: 'cNombreArchivo',    desc: 'Nombre del archivo .txt a imprimir',         defaultValue: null },
   { code: 'p1', key: 'cPrinterName',      desc: 'Nombre de la impresora destino',              defaultValue: null },
   { code: 'w1', key: 'cAnchoMaximo',      desc: 'Ancho máximo de caracteres por línea',        defaultValue: '40' },
@@ -113,6 +114,12 @@ function validate(parsed) {
   if (p['43'] !== undefined) {
     if (!['S', 'N'].includes(p['43'].toUpperCase())) {
       errors.push(`cImpresionDirecta (43) inválido: "${p['43']}". Debe ser S (Directa) o N (GDI).`);
+    }
+  }
+
+  if (p['44'] !== undefined) {
+    if (!['S', 'N'].includes(p['44'].toUpperCase())) {
+      errors.push(`cNotificacion (44) inválido: "${p['44']}". Debe ser S (Habilitada) o N (Deshabilitada).`);
     }
   }
 

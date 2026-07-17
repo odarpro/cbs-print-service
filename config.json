@@ -32,5 +32,9 @@
   "pollingIntervalMs":   1000,
   "fileStabilizeMs":     500,
   "retryCount":          3,
-  "retryIntervalMs":     5000
+  "retryIntervalMs":     5000,
+
+  "toastEnabled":        true,
+  "toastOnSuccess":      true,
+  "toastOnError":        true
 }

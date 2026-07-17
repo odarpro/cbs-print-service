@@ -53,6 +53,9 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `fileStabilizeMs` | number | `500` | Espera de estabilización antes de procesar el archivo |
 | `retryCount` | number | `3` | Reintentos ante fallo de impresión |
 | `retryIntervalMs` | number | `5000` | Intervalo entre reintentos en ms |
+| `toastEnabled` | boolean | `true` | Habilitar notificaciones toast de Windows |
+| `toastOnSuccess` | boolean | `true` | Mostrar toast al imprimir exitosamente |
+| `toastOnError` | boolean | `true` | Mostrar toast al fallar impresión o parámetros inválidos |
 
 ### `printers` — Configuración por tipo de documento
 
@@ -90,6 +93,7 @@ Rec~m0~t9~fCourier_New~b0~a1contenido.txt~p1EPSON_LX-350~w140~43S.txt
 | `p1` | `cPrinterName` | nombre de impresora destino | — |
 | `w1` | `cAnchoMaximo` | `10`–`255` | `40` |
 | `43` | `cImpresionDirecta` | `S`=Directa, `N`=GDI | `S` |
+| `44` | `cNotificacion` | `S`=Habilitada, `N`=Deshabilitada | Usa `toastEnabled` de config |
 
 Cuando un archivo incluye parámetros, estos tienen prioridad sobre `config.json`. Los nombres legacy sin `~` (ej: `Rec20260706_143022.txt`) usan solo la configuración del JSON.
 
@@ -103,6 +107,49 @@ Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser
 |---|---|---|
 | **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `/43 S`. |
 | **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/P para negrita si `bold=true`, y envía el texto formateado. Equivale a `/43 N`. |
+
+---
+
+## Notificaciones Toast de Windows
+
+El servicio envía notificaciones emergentes nativas de Windows 10/11 cuando ocurren eventos clave.
+
+### Eventos notificados
+
+| Evento | Título toast | Cuándo |
+|---|---|---|
+| Impresión OK | `CBS Print - Impresión exitosa` | Después de cada impresión exitosa |
+| Error de impresión | `CBS Print - Error de impresión` | Cuando se agotan los reintentos |
+| Parámetros inválidos | `CBS Print - Archivo inválido` | Nombre de archivo con parámetros incorrectos |
+| Error crítico | `CBS Print - Excepción no capturada` | Error no manejado del servicio |
+
+### Configuración
+
+En `config.json`:
+
+```json
+{
+  "toastEnabled":   true,
+  "toastOnSuccess": true,
+  "toastOnError":   true
+}
+```
+
+### Control por archivo (parámetro 44)
+
+Se puede sobreescribir el comportamiento por archivo usando el parámetro `44` en el nombre:
+
+```
+Rec~m0~44S~a1contenido.txt    → Forzar toast para este archivo
+Rec~m0~44N~a1contenido.txt    → Deshabilitar toast para este archivo
+Rec~m0~a1contenido.txt        → Usa el valor de config.json
+```
+
+### Prioridad de resolución
+
+```
+44S/44N en archivo  >  toastEnabled en config.json  >  default: true
+```
 
 ---
 
@@ -155,6 +202,7 @@ npm run test:watch   # Modo watch
 | `tests/fileProcessor.test.js` | Cola FIFO, reintentos, post-procesamiento (MOVE/DELETE) |
 | `tests/gdiPrinter.test.js` | Word-wrap, formato GDI, códigos ESC/P |
 | `tests/printer.test.js` | Resolución de impresora, envío al spooler |
+| `tests/notifier.test.js` | Notificaciones toast, resolución de parámetro 44 |
 
 ---
 
@@ -206,7 +254,8 @@ cbs-print-service/
 │   ├── printer.js           # Envío a impresora vía Winspool API
 │   ├── gdiPrinter.js        # Renderizado modo GDI (word-wrap, ESC/P)
 │   ├── logger.js            # Logging rotativo (winston)
-│   └── filenameParser.js    # Parseo de parámetros en nombre de archivo
+│   ├── filenameParser.js    # Parseo de parámetros en nombre de archivo
+│   └── notifier.js          # Notificaciones toast de Windows (node-notifier)
 ├── scripts/                 # Scripts auxiliares
 │   ├── install-service.js
 │   ├── uninstall-service.js
@@ -219,7 +268,8 @@ cbs-print-service/
 │   ├── filenameParser.test.js
 │   ├── fileProcessor.test.js
 │   ├── gdiPrinter.test.js
-│   └── printer.test.js
+│   ├── printer.test.js
+│   └── notifier.test.js
 ├── dist/                    # Instalador generado (build.bat)
 ├── config.json              # Configuración (NO sobreescrita en updates)
 ├── config.example.json      # Plantilla de ejemplo
@@ -276,3 +326,4 @@ historyFolder (MOVE) o eliminación (DELETE)
 |---|---|---|
 | 1.0.0 | Jun 2026 | Versión inicial. Reemplaza CBSprint.exe (VB). |
 | 1.1.0 | Jul 2026 | Modo GDI, health check, status.bat, tests, config.example.json, pollingIntervalMs |
+| 1.2.0 | Jul 2026 | Notificaciones toast de Windows, parámetro 44 para control por archivo, configuración toastEnabled/toastOnSuccess/toastOnError |

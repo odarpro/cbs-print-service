@@ -16,6 +16,7 @@ const path           = require('path');
 const logger         = require('./logger');
 const printer        = require('./printer');
 const filenameParser = require('./filenameParser');
+const notifier       = require('./notifier');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -189,6 +190,10 @@ class FileProcessor {
           fileName,
           errors: validation.errors
         });
+
+        const parsedParams = parsed && parsed.params ? parsed.params : null;
+        notifier.notifyInvalidFile(fileName, validation.errors, parsedParams);
+
         this._moveToError(filePath, `Parámetros inválidos: ${validation.errors.join('; ')}`);
         return;
       }
@@ -291,6 +296,9 @@ class FileProcessor {
           attempt
         });
 
+        const parsedParams = parsed && parsed.params ? parsed.params : null;
+        notifier.notifyPrintSuccess(fileName, resolvedPrinterName, parsedParams);
+
         this._postProcess(filePath);
         return;
 
@@ -313,6 +321,10 @@ class FileProcessor {
       error: lastError ? lastError.message : 'desconocido',
       maxRetries
     });
+
+    const parsedParams = parsed && parsed.params ? parsed.params : null;
+    notifier.notifyPrintError(fileName, lastError ? lastError.message : 'Error desconocido', parsedParams);
+
     this._moveToError(filePath, lastError ? lastError.message : 'Error desconocido');
   }
 

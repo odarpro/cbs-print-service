@@ -59,6 +59,30 @@ describe('filenameParser.parse()', () => {
     assert.equal(result.params['43'], 'N');
   });
 
+  it('extrae parámetro 44=S (notificación habilitada)', () => {
+    const result = filenameParser.parse(
+      'Rec~m0~t9~a1test.txt~p1Printer~w140~44S.txt'
+    );
+    assert.equal(result.prefix, 'voucher');
+    assert.equal(result.params['44'], 'S');
+  });
+
+  it('extrae parámetro 44=N (notificación deshabilitada)', () => {
+    const result = filenameParser.parse(
+      'Rec~m0~t9~a1test.txt~p1Printer~w140~44N.txt'
+    );
+    assert.equal(result.prefix, 'voucher');
+    assert.equal(result.params['44'], 'N');
+  });
+
+  it('extrae parámetros 43 y 44 juntos', () => {
+    const result = filenameParser.parse(
+      'Rec~m0~t9~a1test.txt~p1Printer~w140~43S~44N.txt'
+    );
+    assert.equal(result.params['43'], 'S');
+    assert.equal(result.params['44'], 'N');
+  });
+
   it('tolera mayúsculas/minúsculas en el prefijo', () => {
     const result = filenameParser.parse('REC~m0~t9.txt');
     assert.equal(result.prefix, 'voucher');
@@ -148,6 +172,25 @@ describe('filenameParser.validate()', () => {
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, false);
     assert.ok(result.errors[0].includes('cImpresionDirecta'));
+  });
+
+  it('acepta cNotificacion (44) válido con S', () => {
+    const parsed = filenameParser.parse('Rec~44S.txt');
+    const result = filenameParser.validate(parsed);
+    assert.equal(result.valid, true);
+  });
+
+  it('acepta cNotificacion (44) válido con N', () => {
+    const parsed = filenameParser.parse('Rec~44N.txt');
+    const result = filenameParser.validate(parsed);
+    assert.equal(result.valid, true);
+  });
+
+  it('rechaza cNotificacion (44) inválido', () => {
+    const parsed = filenameParser.parse('Rec~44X.txt');
+    const result = filenameParser.validate(parsed);
+    assert.equal(result.valid, false);
+    assert.ok(result.errors[0].includes('cNotificacion'));
   });
 
   it('retorna múltiples errores cuando varios parámetros son inválidos', () => {
