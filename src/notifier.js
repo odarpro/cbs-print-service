@@ -29,7 +29,7 @@ function init(cfg) {
  */
 function isEnabled(parsedParams) {
   if (parsedParams && parsedParams['44'] !== undefined) {
-    return parsedParams['44'].toUpperCase() === 'S';
+    return parsedParams['44'].toUpperCase() === 'A';
   }
   if (_config && _config.toastEnabled !== undefined) {
     return !!_config.toastEnabled;

@@ -22,7 +22,7 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 
-set INSTALL_DIR=D:\CBS\PrintService
+set INSTALL_DIR=C:\CBS\PrintService
 set SOURCE_DIR=%~dp0
 
 echo [1/5] Deteniendo servicio...

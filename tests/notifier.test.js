@@ -39,19 +39,19 @@ describe('notifier.isEnabled()', () => {
     assert.equal(notifier.isEnabled(null), true);
   });
 
-  it('retorna true cuando parámetro 44 es S (override)', () => {
+  it('retorna true cuando parámetro 44 es A (override)', () => {
     notifier.init({ toastEnabled: false });
-    assert.equal(notifier.isEnabled({ '44': 'S' }), true);
+    assert.equal(notifier.isEnabled({ '44': 'A' }), true);
   });
 
-  it('retorna false cuando parámetro 44 es N (override)', () => {
+  it('retorna false cuando parámetro 44 es I (override)', () => {
     notifier.init({ toastEnabled: true });
-    assert.equal(notifier.isEnabled({ '44': 'N' }), false);
+    assert.equal(notifier.isEnabled({ '44': 'I' }), false);
   });
 
   it('normaliza a mayúsculas para parámetro 44', () => {
-    assert.equal(notifier.isEnabled({ '44': 's' }), true);
-    assert.equal(notifier.isEnabled({ '44': 'n' }), false);
+    assert.equal(notifier.isEnabled({ '44': 'a' }), true);
+    assert.equal(notifier.isEnabled({ '44': 'i' }), false);
   });
 });
 
@@ -100,10 +100,10 @@ describe('notifier.shouldNotifyError()', () => {
 
   it('resuelve parámetro 44 sobre config global', () => {
     notifier.init({ toastEnabled: true, toastOnError: true });
-    assert.equal(notifier.shouldNotifyError({ '44': 'N' }), false);
+    assert.equal(notifier.shouldNotifyError({ '44': 'I' }), false);
 
     notifier.init({ toastEnabled: false, toastOnError: true });
-    assert.equal(notifier.shouldNotifyError({ '44': 'S' }), true);
+    assert.equal(notifier.shouldNotifyError({ '44': 'A' }), true);
   });
 });
 

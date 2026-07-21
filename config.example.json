@@ -2,7 +2,7 @@
   "watchFolder":         "D:\\Impresiones",
   "historyFolder":       "D:\\Impresiones\\Historico",
   "errorFolder":         "D:\\Impresiones\\Errores",
-  "logFolder":           "D:\\CBS\\PrintService\\Logs",
+  "logFolder":           "D:\\Impresiones\\Logs",
   "logLevel":            "info",
   "logRetentionDays":    30,
 

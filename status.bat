@@ -21,8 +21,8 @@ echo.
 
 :: ── 2. Health check (si existe) ───────────────────────────────────────────────
 echo [HEALTH CHECK]
-if exist "D:\CBS\PrintService\healthcheck.json" (
-    type "D:\CBS\PrintService\healthcheck.json"
+if exist "C:\CBS\PrintService\healthcheck.json" (
+    type "C:\CBS\PrintService\healthcheck.json"
 ) else (
     echo   No disponible (el servicio podria no estar instalado o iniciado).
 )
@@ -30,8 +30,8 @@ echo.
 
 :: ── 3. Archivos pendientes ────────────────────────────────────────────────────
 echo [ARCHIVOS PENDIENTES]
-if exist "D:\CBS\PrintService\config.json" (
-    for /f "tokens=2 delims=:," %%i in ('findstr /I "watchFolder" "D:\CBS\PrintService\config.json"') do (
+if exist "C:\CBS\PrintService\config.json" (
+    for /f "tokens=2 delims=:," %%i in ('findstr /I "watchFolder" "C:\CBS\PrintService\config.json"') do (
         set WATCH_DIR=%%i
         set WATCH_DIR=!WATCH_DIR:"=!
         set WATCH_DIR=!WATCH_DIR: =!
@@ -50,16 +50,16 @@ if exist "D:\CBS\PrintService\config.json" (
     )
     endlocal
 ) else (
-    echo   config.json no encontrado en D:\CBS\PrintService\
+    echo   config.json no encontrado en C:\CBS\PrintService\
 )
 echo.
 
 echo ============================================================
 echo  Para mas detalles ejecute:
-if exist "D:\CBS\PrintService\bin\node.exe" (
-    echo    D:\CBS\PrintService\bin\node.exe D:\CBS\PrintService\scripts\diagnostico.js
+if exist "C:\CBS\PrintService\bin\node.exe" (
+    echo    C:\CBS\PrintService\bin\node.exe C:\CBS\PrintService\scripts\diagnostico.js
 ) else (
-    echo    node D:\CBS\PrintService\scripts\diagnostico.js
+    echo    node C:\CBS\PrintService\scripts\diagnostico.js
 )
 echo ============================================================
 echo.

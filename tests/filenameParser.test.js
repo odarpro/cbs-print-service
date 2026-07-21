@@ -30,57 +30,57 @@ describe('filenameParser.parse()', () => {
 
   it('extrae todos los parámetros de un nombre completo', () => {
     const result = filenameParser.parse(
-      'Rec~m0~t9~fCourier_New~b0~a1contenido.txt~p1EPSON_LX-350~w140~43S.txt'
+      'Rec~m0~t9~fCourier_New~bN~a1contenido.txt~p1EPSON_LX-350~w140~43A.txt'
     );
     assert.equal(result.prefix, 'voucher');
     assert.equal(result.hasParams, true);
     assert.equal(result.params.m, '0');
     assert.equal(result.params.t, '9');
     assert.equal(result.params.f, 'Courier_New');
-    assert.equal(result.params.b, '0');
+    assert.equal(result.params.b, 'N');
     assert.equal(result.params.a1, 'contenido.txt');
     assert.equal(result.params.p1, 'EPSON_LX-350');
     assert.equal(result.params.w1, '40');
-    assert.equal(result.params['43'], 'S');
+    assert.equal(result.params['43'], 'A');
   });
 
-  it('extrae parámetros con modo GDI (43=N) y bold activo (b=1)', () => {
+  it('extrae parámetros con modo GDI (43=I) y bold activo (b=S)', () => {
     const result = filenameParser.parse(
-      'Val~m1~t12~fArial~b1~a1reporte.txt~p1Zebra_ZPL~w180~43N.txt'
+      'Val~m1~t12~fArial~bS~a1reporte.txt~p1Zebra_ZPL~w180~43I.txt'
     );
     assert.equal(result.prefix, 'slip');
     assert.equal(result.params.m, '1');
     assert.equal(result.params.t, '12');
     assert.equal(result.params.f, 'Arial');
-    assert.equal(result.params.b, '1');
+    assert.equal(result.params.b, 'S');
     assert.equal(result.params.a1, 'reporte.txt');
     assert.equal(result.params.p1, 'Zebra_ZPL');
     assert.equal(result.params.w1, '80');
-    assert.equal(result.params['43'], 'N');
+    assert.equal(result.params['43'], 'I');
   });
 
-  it('extrae parámetro 44=S (notificación habilitada)', () => {
+  it('extrae parámetro 44=A (notificación habilitada)', () => {
     const result = filenameParser.parse(
-      'Rec~m0~t9~a1test.txt~p1Printer~w140~44S.txt'
+      'Rec~m0~t9~a1test.txt~p1Printer~w140~44A.txt'
     );
     assert.equal(result.prefix, 'voucher');
-    assert.equal(result.params['44'], 'S');
+    assert.equal(result.params['44'], 'A');
   });
 
-  it('extrae parámetro 44=N (notificación deshabilitada)', () => {
+  it('extrae parámetro 44=I (notificación deshabilitada)', () => {
     const result = filenameParser.parse(
-      'Rec~m0~t9~a1test.txt~p1Printer~w140~44N.txt'
+      'Rec~m0~t9~a1test.txt~p1Printer~w140~44I.txt'
     );
     assert.equal(result.prefix, 'voucher');
-    assert.equal(result.params['44'], 'N');
+    assert.equal(result.params['44'], 'I');
   });
 
   it('extrae parámetros 43 y 44 juntos', () => {
     const result = filenameParser.parse(
-      'Rec~m0~t9~a1test.txt~p1Printer~w140~43S~44N.txt'
+      'Rec~m0~t9~a1test.txt~p1Printer~w140~43A~44I.txt'
     );
-    assert.equal(result.params['43'], 'S');
-    assert.equal(result.params['44'], 'N');
+    assert.equal(result.params['43'], 'A');
+    assert.equal(result.params['44'], 'I');
   });
 
   it('tolera mayúsculas/minúsculas en el prefijo', () => {
@@ -126,7 +126,7 @@ describe('filenameParser.parse()', () => {
 describe('filenameParser.validate()', () => {
 
   it('acepta parámetros válidos', () => {
-    const parsed = filenameParser.parse('Rec~m0~t9~fCourier_New~b0~a1test.txt~p1Printer~w140~43S.txt');
+    const parsed = filenameParser.parse('Rec~m0~t9~fCourier_New~bN~a1test.txt~p1Printer~w140~43A.txt');
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, true);
     assert.deepEqual(result.errors, []);
@@ -174,14 +174,14 @@ describe('filenameParser.validate()', () => {
     assert.ok(result.errors[0].includes('cImpresionDirecta'));
   });
 
-  it('acepta cNotificacion (44) válido con S', () => {
-    const parsed = filenameParser.parse('Rec~44S.txt');
+  it('acepta cNotificacion (44) válido con A', () => {
+    const parsed = filenameParser.parse('Rec~44A.txt');
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, true);
   });
 
-  it('acepta cNotificacion (44) válido con N', () => {
-    const parsed = filenameParser.parse('Rec~44N.txt');
+  it('acepta cNotificacion (44) válido con I', () => {
+    const parsed = filenameParser.parse('Rec~44I.txt');
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, true);
   });
@@ -229,7 +229,7 @@ describe('filenameParser.buildExample()', () => {
     assert.ok(example.startsWith('Rec'));
     assert.ok(example.endsWith('.txt'));
     assert.ok(example.includes('~m0'));
-    assert.ok(example.includes('~43S'));
+    assert.ok(example.includes('~43A'));
     assert.ok(example.includes('contenido.txt'));
   });
 });

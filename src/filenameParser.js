@@ -3,15 +3,15 @@
 const path = require('path');
 
 const PARAM_DEFS = [
-  { code: '43', key: 'cImpresionDirecta', desc: 'Tipo de impresión (S=Directa, N=GDI)',      defaultValue: 'S' },
-  { code: '44', key: 'cNotificacion',    desc: 'Notificación toast (S=Habilitada, N=Deshabilitada)', defaultValue: null },
+  { code: '43', key: 'cImpresionDirecta', desc: 'Tipo de impresión (A=Activo/Directa, I=Inactivo/GDI)', defaultValue: 'A' },
+  { code: '44', key: 'cNotificacion',    desc: 'Notificación toast (A=Activo/Habilitado, I=Inactivo/Deshabilitado)', defaultValue: null },
   { code: 'a1', key: 'cNombreArchivo',    desc: 'Nombre del archivo .txt a imprimir',         defaultValue: null },
   { code: 'p1', key: 'cPrinterName',      desc: 'Nombre de la impresora destino',              defaultValue: null },
   { code: 'w1', key: 'cAnchoMaximo',      desc: 'Ancho máximo de caracteres por línea',        defaultValue: '40' },
   { code: 'm',  key: 'cMetodo',           desc: 'Método de impresión (0=Original, 1=Directo)', defaultValue: '0' },
   { code: 't',  key: 'cTamañoLetra',      desc: 'Tamaño de la fuente',                         defaultValue: '9' },
   { code: 'f',  key: 'cNombreFont',       desc: 'Nombre de la fuente',                         defaultValue: 'Courier_New' },
-  { code: 'b',  key: 'cBold',             desc: 'Negrita (0=No, 1=Sí)',                        defaultValue: '0' }
+  { code: 'b',  key: 'cBold',             desc: 'Negrita (S=Negrita, N=No negrita)',              defaultValue: 'N' }
 ];
 
 const CODE_MAP = {};
@@ -106,20 +106,20 @@ function validate(parsed) {
   }
 
   if (p.b !== undefined) {
-    if (!['0', '1'].includes(p.b)) {
-      errors.push(`cBold (b) inválido: "${p.b}". Debe ser 0 o 1.`);
+    if (!['S', 'N'].includes(p.b.toUpperCase())) {
+      errors.push(`cBold (b) inválido: "${p.b}". Debe ser S (Negrita) o N (No negrita).`);
     }
   }
 
   if (p['43'] !== undefined) {
-    if (!['S', 'N'].includes(p['43'].toUpperCase())) {
-      errors.push(`cImpresionDirecta (43) inválido: "${p['43']}". Debe ser S (Directa) o N (GDI).`);
+    if (!['A', 'I'].includes(p['43'].toUpperCase())) {
+      errors.push(`cImpresionDirecta (43) inválido: "${p['43']}". Debe ser A (Activo/Directa) o I (Inactivo/GDI).`);
     }
   }
 
   if (p['44'] !== undefined) {
-    if (!['S', 'N'].includes(p['44'].toUpperCase())) {
-      errors.push(`cNotificacion (44) inválido: "${p['44']}". Debe ser S (Habilitada) o N (Deshabilitada).`);
+    if (!['A', 'I'].includes(p['44'].toUpperCase())) {
+      errors.push(`cNotificacion (44) inválido: "${p['44']}". Debe ser A (Activo/Habilitado) o I (Inactivo/Deshabilitado).`);
     }
   }
 
@@ -127,7 +127,7 @@ function validate(parsed) {
 }
 
 function buildExample() {
-  return 'Rec~m0~t9~fCourier_New~b0~a1contenido.txt~p1EPSON_LX-350~w140~43S.txt';
+  return 'Rec~m0~t9~fCourier_New~bN~a1contenido.txt~p1EPSON_LX-350~w140~43A.txt';
 }
 
 function describeFormat() {
@@ -152,7 +152,7 @@ function describeFormat() {
   lines.push(`  ${buildExample()}`);
   lines.push('');
   lines.push('Equivalente a:');
-  lines.push('  /m0  /t9  /fCourier_New  /b0  /a1contenido.txt  /p1EPSON_LX-350  /w140  /43S');
+  lines.push('  /m0  /t9  /fCourier_New  /bN  /a1contenido.txt  /p1EPSON_LX-350  /w140  /43A');
   lines.push('');
   lines.push('Notas:');
   lines.push('  • El valor de a1 debe ser solo el nombre del archivo (sin ruta).');

@@ -2,7 +2,7 @@
   "watchFolder":         "D:\\Impresiones",
   "historyFolder":       "D:\\Impresiones\\Historico",
   "errorFolder":         "D:\\Impresiones\\Errores",
-  "logFolder":           "D:\\CBS\\PrintService\\Logs",
+  "logFolder":           "D:\\Impresiones\\Logs",
   "logLevel":            "info",
   "logRetentionDays":    30,
 
@@ -10,7 +10,7 @@
 
   "printers": {
     "voucher": {
-      "name":            "EPSON TM-U950",
+      "name":            "Recibo",
       "fontName":        "Courier New",
       "fontSize":        9,
       "bold":            false,
@@ -18,7 +18,7 @@
       "copies":          1
     },
     "slip": {
-      "name":            "EPSON TM-U950",
+      "name":            "Cheques",
       "fontName":        "Courier New",
       "fontSize":        9,
       "bold":            false,

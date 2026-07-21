@@ -22,7 +22,7 @@ if (!fs.existsSync(configFile)) {
   console.log('config.json not found, creating default');
   const cfg = {
     watchFolder, historyFolder, errorFolder,
-    logFolder: path.join(appDir, 'Logs'),
+    logFolder: path.join(watchFolder, 'Logs'),
     logLevel: 'info', logRetentionDays: 30,
     printMethod: 'DIRECT',
     printers: {
@@ -41,7 +41,7 @@ if (!fs.existsSync(configFile)) {
   cfg.watchFolder = watchFolder;
   cfg.historyFolder = historyFolder;
   cfg.errorFolder = errorFolder;
-  cfg.logFolder = path.join(appDir, 'Logs');
+  cfg.logFolder = path.join(watchFolder, 'Logs');
   fs.writeFileSync(configFile, JSON.stringify(cfg, null, 2), 'utf8');
 }
 

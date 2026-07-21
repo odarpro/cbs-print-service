@@ -30,7 +30,7 @@ function isRunningAsService() {
  *   cfg.logRetentionDays  – días de retención (default 30)
  */
 function init(cfg) {
-  const logFolder      = cfg.logFolder      || 'D:\\CBS\\PrintService\\Logs';
+  const logFolder      = cfg.logFolder      || 'D:\\Impresiones\\Logs';
   const logLevel       = cfg.logLevel       || 'info';
   const retentionDays  = cfg.logRetentionDays || 30;
 

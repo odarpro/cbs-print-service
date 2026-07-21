@@ -225,6 +225,8 @@ class FileProcessor {
 
     if (!content || content.trim().length === 0) {
       log.warn('Archivo vacío, moviendo a errores', { filePath: contentFilePath });
+      const parsedParams = parsed && parsed.params ? parsed.params : null;
+      notifier.notifyPrintError(fileName, 'Archivo vacío', parsedParams);
       this._moveToError(filePath, 'Archivo vacío');
       return;
     }
@@ -240,18 +242,20 @@ class FileProcessor {
     const resolvedPrinterName = (parsed && parsed.params.p1) || printerCfg.name;
     if (!resolvedPrinterName) {
       log.error('No hay impresora configurada para el tipo de documento', { docType });
+      const parsedParams = parsed && parsed.params ? parsed.params : null;
+      notifier.notifyPrintError(fileName, 'Sin impresora configurada', parsedParams);
       this._moveToError(filePath, 'Sin impresora configurada');
       return;
     }
 
     const rawMethod43 = parsed && parsed.params['43'];
     const resolvedPrintMethod = rawMethod43
-      ? (rawMethod43.toUpperCase() === 'N' ? 'GDI' : 'DIRECT')
+      ? (rawMethod43.toUpperCase() === 'I' ? 'GDI' : 'DIRECT')
       : (cfg.printMethod || 'DIRECT');
 
     const rawBold = parsed && parsed.params.b;
     const resolvedBold = rawBold !== undefined
-      ? (rawBold === '1')
+      ? (rawBold.toUpperCase() === 'S')
       : (printerCfg.bold || false);
 
     const rawWidth = parsed && parsed.params.w1;

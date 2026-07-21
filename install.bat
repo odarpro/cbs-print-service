@@ -17,7 +17,7 @@ title CBS Print Service - Instalador
 
 echo.
 echo ============================================================
-echo  CBS Print Service  v1.0.0  -  Instalador
+echo  CBS Print Service  v1.6.0  -  Instalador
 echo ============================================================
 echo.
 
@@ -32,7 +32,7 @@ if %errorLevel% neq 0 (
 )
 
 :: ── Ruta de instalacion ──────────────────────────────────────────────────────
-set INSTALL_DIR=D:\CBS\PrintService
+set INSTALL_DIR=C:\CBS\PrintService
 set SOURCE_DIR=%~dp0
 
 echo Directorio fuente   : %SOURCE_DIR%

@@ -19,8 +19,8 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Manual (desde el código fuente)
 1. Ejecutar `install.bat` como **Administrador**.
-2. Copia archivos a `D:\CBS\PrintService\`, instala dependencias npm y registra el servicio `CBSPrintService` (inicio automático).
-3. Editar `D:\CBS\PrintService\config.json` con valores reales.
+2. Copia archivos a `C:\CBS\PrintService\`, instala dependencias npm y registra el servicio `CBSPrintService` (inicio automático).
+3. Editar `C:\CBS\PrintService\config.json` con valores reales.
 4. Reiniciar el servicio desde Administrador de Tareas → Servicios.
 
 ### Instalador distribuible (build)
@@ -43,7 +43,7 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `watchFolder` | string | `D:\Impresiones` | Carpeta monitoreada donde Oracle Forms deposita archivos .txt |
 | `historyFolder` | string | `D:\Impresiones\Historico` | Destino de archivos impresos (cuando `fileAction: "MOVE"`) |
 | `errorFolder` | string | `D:\Impresiones\Errores` | Destino de archivos que fallaron tras todos los reintentos |
-| `logFolder` | string | `D:\CBS\PrintService\Logs` | Carpeta de logs rotativos diarios |
+| `logFolder` | string | `D:\Impresiones\Logs` | Carpeta de logs rotativos diarios |
 | `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
 | `printMethod` | string | `"DIRECT"` | Modo de impresión: `"DIRECT"` o `"GDI"` |
@@ -159,7 +159,7 @@ Rec~m0~a1contenido.txt        → Usa el valor de config.json
 
 | Script | Admin | Descripción |
 |---|---|---|
-| `install.bat` | ✅ | Instala el servicio en `D:\CBS\PrintService`, crea carpetas, instala dependencias, registra servicio |
+| `install.bat` | ✅ | Instala el servicio en `C:\CBS\PrintService`, crea carpetas, instala dependencias, registra servicio |
 | `uninstall.bat` | ✅ | Detiene, elimina el servicio y remueve archivos (preserva Logs) |
 | `update.bat` | ✅ | Detiene servicio, reemplaza código, reinstala dependencias y reinicia |
 | `status.bat` | ❌ | Muestra estado del servicio, health check y archivos pendientes |
@@ -208,7 +208,7 @@ npm run test:watch   # Modo watch
 
 ## Logs
 
-Ruta: `logFolder` configurado (default `D:\CBS\PrintService\Logs`). Rotación diaria automática, retención configurable.
+Ruta: `logFolder` configurado (default `D:\Impresiones\Logs`). Rotación diaria automática, retención configurable.
 
 Formato: `[timestamp] [NIVEL] mensaje | {"meta":"json"}`
 
@@ -229,7 +229,7 @@ El servicio genera `healthcheck.json` con estado en vivo (actualizado cada 30s):
 {"status":"active","pid":1234,"uptime":3600,"queue":0,"timestamp":"2026-07-06T12:00:00.000Z"}
 ```
 
-Verificar con: `status.bat` o `type D:\CBS\PrintService\healthcheck.json`.
+Verificar con: `status.bat` o `type C:\CBS\PrintService\healthcheck.json`.
 
 ---
 
@@ -327,3 +327,4 @@ historyFolder (MOVE) o eliminación (DELETE)
 | 1.0.0 | Jun 2026 | Versión inicial. Reemplaza CBSprint.exe (VB). |
 | 1.1.0 | Jul 2026 | Modo GDI, health check, status.bat, tests, config.example.json, pollingIntervalMs |
 | 1.2.0 | Jul 2026 | Notificaciones toast de Windows, parámetro 44 para control por archivo, configuración toastEnabled/toastOnSuccess/toastOnError |
+| 1.6.0 | Jul 2026 | Sincronización de versiones en todos los archivos de configuración |

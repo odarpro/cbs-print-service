@@ -14,7 +14,7 @@
 ; =============================================================================
 
 #define MyAppName      "CBS Print Service"
-#define MyAppVersion   "1.5.0"
+#define MyAppVersion   "1.6.0"
 #define MyAppPublisher  "CBS"
 #define MyAppURL       ""
 #define MyExeName      "CBSPrintService.exe"
@@ -24,7 +24,7 @@ AppId                   = {{B8F4A3D2-1E5C-4A7B-9D6F-8C2E3F1A5B7D}
 AppName                 = {#MyAppName}
 AppVersion              = {#MyAppVersion}
 AppPublisher            = {#MyAppPublisher}
-DefaultDirName          = D:\CBS\PrintService
+DefaultDirName          = C:\CBS\PrintService
 DefaultGroupName        = CBS Print Service
 DisableProgramGroupPage = yes
 OutputDir               = .\dist
@@ -82,7 +82,7 @@ Source: "post-install.bat";            DestDir: "{app}";              Flags: ign
 Source: "README.md";                   DestDir: "{app}";              Flags: ignoreversion
 
 [Dirs]
-Name: "{app}\Logs";                    Permissions: users-modify
+Name: "{code:GetWatchFolder}\Logs";     Permissions: users-modify
 Name: "{code:GetWatchFolder}";         Permissions: users-modify
 Name: "{code:GetHistoryFolder}";       Permissions: users-modify
 Name: "{code:GetErrorFolder}";         Permissions: users-modify
@@ -123,7 +123,7 @@ Name: "{group}\Estado del Servicio";  Filename: "{app}\status.bat";             
 Name: "{group}\Diagnóstico";          Filename: "cmd.exe"; \
   Parameters: "/K node ""{app}\scripts\diagnostico.js""";                                       Flags: runminimized
 Name: "{group}\Configuración (editar)"; Filename: "notepad.exe"; Parameters: "{app}\config.json"
-Name: "{group}\Carpeta de Logs";      Filename: "{app}\Logs"
+Name: "{group}\Carpeta de Logs";      Filename: "{code:GetWatchFolder}\Logs"
 Name: "{group}\Desinstalar";          Filename: "{uninstallexe}"
 
 [Code]
