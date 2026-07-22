@@ -91,6 +91,15 @@ class FolderWatcher {
         logger.get().info(`Carpeta creada: ${dir}`);
       }
     }
+
+    // Crear carpeta de alertas (fallback para notificaciones)
+    if (cfg.logFolder) {
+      const alertDir = require('path').join(require('path').dirname(cfg.logFolder), 'Alertas');
+      if (!fs.existsSync(alertDir)) {
+        fs.mkdirSync(alertDir, { recursive: true });
+        logger.get().info(`Carpeta creada: ${alertDir}`);
+      }
+    }
   }
 
   /** Cantidad de archivos pendientes en cola. */

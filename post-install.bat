@@ -21,4 +21,6 @@ echo [%DATE% %TIME%] Registrando servicio... >> install.log 2>&1
 %NODE_EXE% scripts\install-service.js >> install.log 2>&1
 echo [%DATE% %TIME%] Iniciando servicio... >> install.log 2>&1
 net start CBSPrintService >> install.log 2>&1
+echo [%DATE% %TIME%] Instalando vigilante de alertas... >> install.log 2>&1
+call scripts\install-alert-watcher.bat >> install.log 2>&1
 echo [%DATE% %TIME%] Instalacion completada >> install.log 2>&1

@@ -51,7 +51,7 @@ const log = logger.get();
 notifier.init(config);
 
 log.info('============================================================');
-log.info('CBS Print Service  v1.2.0  arrancando...');
+log.info('CBS Print Service  v1.7.0  arrancando...');
 log.info('============================================================');
 log.info('Configuración cargada', { configPath: CONFIG_PATH });
 

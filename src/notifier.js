@@ -2,13 +2,16 @@
 // =============================================================================
 // notifier.js  –  CBS Print Service
 //
-// Envía notificaciones toast de Windows 10/11 usando node-notifier.
+// Escribe archivos de alerta en la carpeta Alertas.
+// El vigilante de alertas (alert-watcher.ps1) corre en la sesión del usuario
+// y muestra un MessageBox por cada archivo nuevo.
+//
 // Controlado por configuración global (config.json) y parámetro 44 por archivo.
 // =============================================================================
 
-const notifier = require('node-notifier');
-const path     = require('path');
-const logger   = require('./logger');
+const fs   = require('fs');
+const path = require('path');
+const logger = require('./logger');
 
 let _config = null;
 
@@ -21,7 +24,19 @@ function init(cfg) {
 }
 
 /**
- * Determina si las notificaciones toast están habilitadas.
+ * Obtiene la ruta de la carpeta de alertas.
+ * Deriva de logFolder: C:\Impresiones\Logs → C:\Impresiones\Alertas
+ * @returns {string}
+ */
+function _getAlertDir() {
+  if (_config && _config.logFolder) {
+    return path.join(path.dirname(_config.logFolder), 'Alertas');
+  }
+  return path.join('C:', 'Impresiones', 'Alertas');
+}
+
+/**
+ * Determina si las notificaciones están habilitadas.
  * Resolución: parámetro 44 del archivo > config.toastEnabled > default true
  *
  * @param {object|null} parsedParams  Parámetros parseados del nombre del archivo
@@ -37,11 +52,6 @@ function isEnabled(parsedParams) {
   return true;
 }
 
-/**
- * Determina si se debe notificar un evento de éxito.
- * @param {object|null} parsedParams  Parámetros parseados del nombre del archivo
- * @returns {boolean}
- */
 function shouldNotifySuccess(parsedParams) {
   if (!isEnabled(parsedParams)) return false;
   if (_config && _config.toastOnSuccess !== undefined) {
@@ -50,11 +60,6 @@ function shouldNotifySuccess(parsedParams) {
   return true;
 }
 
-/**
- * Determina si se debe notificar un evento de error.
- * @param {object|null} parsedParams  Parámetros parseados del nombre del archivo
- * @returns {boolean}
- */
 function shouldNotifyError(parsedParams) {
   if (!isEnabled(parsedParams)) return false;
   if (_config && _config.toastOnError !== undefined) {
@@ -64,7 +69,33 @@ function shouldNotifyError(parsedParams) {
 }
 
 /**
- * Envía una notificación toast de Windows.
+ * Escribe un archivo de alerta que el vigilante mostrará como MessageBox.
+ * @param {string} title   Título de la alerta
+ * @param {string} message Mensaje de la alerta
+ * @param {'info'|'warn'|'error'} level  Nivel del evento
+ */
+function _writeAlert(title, message, level) {
+  try {
+    const alertDir = _getAlertDir();
+    if (!fs.existsSync(alertDir)) {
+      fs.mkdirSync(alertDir, { recursive: true });
+    }
+
+    const iconMap = { error: '[ERROR]', warn: '[AVISO]', info: '[INFO]' };
+    const icon    = iconMap[level] || iconMap.info;
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filePath  = path.join(alertDir, `alert_${timestamp}.txt`);
+
+    const content = `${icon} CBS Print - ${title}\n\n${message}`;
+    fs.writeFileSync(filePath, content, 'utf8');
+  } catch (err) {
+    // No fallar el servicio por un error en la alerta
+  }
+}
+
+/**
+ * Registra una notificación (escribe archivo para el vigilante).
  *
  * @param {object} opts
  * @param {string} opts.title     Título de la notificación
@@ -75,100 +106,31 @@ function notify({ title, message, level = 'info' }) {
   const log = logger.get();
 
   if (!_config || !_config.toastEnabled) {
-    log.debug('Notificación toast deshabilitada, saltando', { title, message });
+    log.debug('Notificación deshabilitada, saltando', { title, message });
     return;
   }
 
-  const iconMap = {
-    info:  path.join(__dirname, '..', 'assets', 'icon-info.ico'),
-    warn:  path.join(__dirname, '..', 'assets', 'icon-warn.ico'),
-    error: path.join(__dirname, '..', 'assets', 'icon-error.ico')
-  };
-
-  const toastOpts = {
-    title:   `CBS Print - ${title}`,
-    message,
-    appID:   'CBS Print Service',
-    wait:    false
-  };
-
-  // Solo incluir ícono si existe el archivo (node-notifier funciona sin ícono)
-  try {
-    const fs = require('fs');
-    const iconPath = iconMap[level] || iconMap.info;
-    if (fs.existsSync(iconPath)) {
-      toastOpts.icon = iconPath;
-    }
-  } catch {}
-
-  log.debug('Enviando notificación toast', { title: toastOpts.title, message, level });
-
-  notifier.notify(toastOpts, (err) => {
-    if (err) {
-      log.warn('Error al enviar notificación toast', { error: err.message });
-    }
-  });
+  log.info('Notificación', { title, message, level });
+  _writeAlert(title, message, level);
 }
 
-/**
- * Notificación de impresión exitosa.
- * @param {string} fileName   Nombre del archivo
- * @param {string} printer    Nombre de la impresora
- * @param {object|null} parsedParams  Parámetros del nombre del archivo
- */
 function notifyPrintSuccess(fileName, printer, parsedParams) {
   if (!shouldNotifySuccess(parsedParams)) return;
-
-  notify({
-    title:   'Impresión exitosa',
-    message: `${fileName} → ${printer}`,
-    level:   'info'
-  });
+  notify({ title: 'Impresión exitosa', message: `${fileName} → ${printer}`, level: 'info' });
 }
 
-/**
- * Notificación de error de impresión (tras agotar reintentos).
- * @param {string} fileName   Nombre del archivo
- * @param {string} reason     Razón del error
- * @param {object|null} parsedParams  Parámetros del nombre del archivo
- */
 function notifyPrintError(fileName, reason, parsedParams) {
   if (!shouldNotifyError(parsedParams)) return;
-
-  notify({
-    title:   'Error de impresión',
-    message: `${fileName}: ${reason}`,
-    level:   'error'
-  });
+  notify({ title: 'Error de impresión', message: `${fileName}: ${reason}`, level: 'error' });
 }
 
-/**
- * Notificación de archivo con parámetros inválidos.
- * @param {string} fileName   Nombre del archivo
- * @param {Array<string>} errors  Lista de errores de validación
- * @param {object|null} parsedParams  Parámetros del nombre del archivo
- */
 function notifyInvalidFile(fileName, errors, parsedParams) {
   if (!shouldNotifyError(parsedParams)) return;
-
-  notify({
-    title:   'Archivo inválido',
-    message: `${fileName}: ${errors.join('; ')}`,
-    level:   'warn'
-  });
+  notify({ title: 'Archivo inválido', message: `${fileName}: ${errors.join('; ')}`, level: 'warn' });
 }
 
-/**
- * Notificación de error crítico del servicio (siempre se muestra).
- * @param {string} title   Título del error
- * @param {string} message Detalle del error
- */
 function notifyCritical(title, message) {
-  notify({
-    title:   title,
-    message: message,
-    level:   'error'
-  });
+  notify({ title, message, level: 'error' });
 }
 
 module.exports = {
