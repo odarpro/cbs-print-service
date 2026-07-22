@@ -11,22 +11,24 @@ setlocal
 :: Carpeta Startup del usuario
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 
-:: Ruta del script de vigilancia
-set "WATCHER_SRC=%~dp0alert-watcher.ps1"
-set "WATCHER_DST=%~dp0..\alert-watcher.ps1"
+:: Ruta del script de vigilancia (misma carpeta que este .bat)
+set "WATCHER_PS1=%~dp0alert-watcher.ps1"
 
-:: Crear acceso directo VBS para ejecutar PowerShell sin consola
-set "VBS_FILE=%STARTUP%\CBSAlertWatcher.vbs"
+:: Archivo BAT que se ejecuta al inicio de sesión
+set "BAT_FILE=%STARTUP%\CBSAlertWatcher.bat"
 
 echo Instalando vigilante de alertas en Startup del usuario...
 
-:: Crear archivo VBS que lanza PowerShell oculto
+:: Crear BAT en Startup que lanza el vigilante de forma invisible
 (
-echo Set objShell = CreateObject^("WScript.Shell"^)
-echo objShell.Run "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File ""%WATCHER_DST%""", 0, False
-) > "%VBS_FILE%"
+echo @echo off
+echo :loop
+echo powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%WATCHER_PS1%"
+echo timeout /t 5 /nobreak ^>nul
+echo goto loop
+) > "%BAT_FILE%"
 
-echo [OK] Vigilante instalado en: %VBS_FILE%
+echo [OK] Vigilante instalado en: %BAT_FILE%
 echo     Se ejecutara automaticamente al iniciar sesion.
 echo.
 

@@ -110,13 +110,35 @@ Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser
 
 ---
 
-## Notificaciones Toast de Windows
+## Notificaciones al usuario
 
-El servicio envía notificaciones emergentes nativas de Windows 10/11 cuando ocurren eventos clave.
+El servicio notifica eventos clave al usuario mediante **archivos de alerta** y un **vigilante** que corre en la sesión del usuario.
+
+### Arquitectura de notificación
+
+```
+Servicio (Session 0)                    Vigilante (Session 3 - escritorio del usuario)
+     │                                            │
+     │  escribe archivo .txt                      │
+     ├─────── C:\Impresiones\Alertas\ ──────────►│  detecta archivo nuevo
+     │                                            │  lee contenido
+     │                                            │  muestra MessageBox nativo
+     │                                            │  elimina archivo
+```
+
+> **¿Por qué dos procesos?** Un Windows Service corre en Session 0 (escritorio invisible). Ninguna UI puede mostrarse desde ahí. El vigilante corre en la sesión del usuario y sirve de puente visual.
+
+### Componentes
+
+| Archivo | Ubicación | Función |
+|---|---|---|
+| `notifier.js` | `src/` | Escribe archivos `.txt` en la carpeta Alertas |
+| `alert-watcher.ps1` | `scripts/` | Monitorea Alertas, muestra MessageBox, elimina archivo |
+| `install-alert-watcher.bat` | `scripts/` | Registra el vigilante en el Startup de Windows |
 
 ### Eventos notificados
 
-| Evento | Título toast | Cuándo |
+| Evento | Título | Cuándo |
 |---|---|---|
 | Impresión OK | `CBS Print - Impresión exitosa` | Después de cada impresión exitosa |
 | Error de impresión | `CBS Print - Error de impresión` | Cuando se agotan los reintentos |
@@ -135,21 +157,33 @@ En `config.json`:
 }
 ```
 
+> `toastEnabled` controla si se escriben archivos de alerta en la carpeta Alertas.
+
 ### Control por archivo (parámetro 44)
 
 Se puede sobreescribir el comportamiento por archivo usando el parámetro `44` en el nombre:
 
 ```
-Rec~m0~44S~a1contenido.txt    → Forzar toast para este archivo
-Rec~m0~44N~a1contenido.txt    → Deshabilitar toast para este archivo
+Rec~m0~44S~a1contenido.txt    → Forzar notificación para este archivo
+Rec~m0~44I~a1contenido.txt    → Deshabilitar notificación para este archivo
 Rec~m0~a1contenido.txt        → Usa el valor de config.json
 ```
 
 ### Prioridad de resolución
 
 ```
-44S/44N en archivo  >  toastEnabled en config.json  >  default: true
+44S/44I en archivo  >  toastEnabled en config.json  >  default: true
 ```
+
+### Instalación del vigilante
+
+El vigilante se instala automáticamente durante la post-instalación. Para instalarlo manualmente:
+
+```powershell
+& "C:\CBS\PrintService\scripts\install-alert-watcher.bat"
+```
+
+Después **cerrar sesión y volver a entrar** para que arranque. El vigilante aparece como ícono en la bandeja del sistema (system tray).
 
 ---
 
@@ -176,6 +210,8 @@ Rec~m0~a1contenido.txt        → Usa el valor de config.json
 | `populate-printers.js` | Detecta impresora por defecto y la asigna a `printers.voucher.name` / `printers.slip.name` en `config.json` |
 | `apply-settings.js` | Aplica rutas de carpetas elegidas durante setup.exe |
 | `find-node.js` / `find-node.cmd` | Localiza Node.js (system PATH o bundled portable) |
+| `alert-watcher.ps1` | Vigilante de alertas — monitorea la carpeta Alertas y muestra MessageBox (corre en sesión del usuario) |
+| `install-alert-watcher.bat` | Instala el vigilante en la carpeta Startup del usuario actual |
 
 ### npm scripts (`package.json`)
 
@@ -235,10 +271,10 @@ Verificar con: `status.bat` o `type C:\CBS\PrintService\healthcheck.json`.
 
 ## Seguridad y Auditoría
 
-- Sin procesos externos: no invoca `cmd.exe`, `powershell.exe` ni `ShellExecute`
 - Impresión vía Winspool API (`WritePrinter`) — módulo nativo `@tbalegas/node-printer`
 - Servicio corre como `LocalSystem` (configurable desde SCM)
 - Fallback PowerShell solo cuando el módulo nativo no está disponible
+- Notificaciones via archivos (sin UI directa desde el servicio)
 - Cada impresión queda registrada en logs con timestamp, archivo, impresora, modo, copias y resultado
 
 ---
@@ -255,7 +291,7 @@ cbs-print-service/
 │   ├── gdiPrinter.js        # Renderizado modo GDI (word-wrap, ESC/P)
 │   ├── logger.js            # Logging rotativo (winston)
 │   ├── filenameParser.js    # Parseo de parámetros en nombre de archivo
-│   └── notifier.js          # Notificaciones toast de Windows (node-notifier)
+│   └── notifier.js          # Escritura de archivos de alerta para el vigilante
 ├── scripts/                 # Scripts auxiliares
 │   ├── install-service.js
 │   ├── uninstall-service.js
@@ -263,7 +299,9 @@ cbs-print-service/
 │   ├── populate-printers.js
 │   ├── apply-settings.js
 │   ├── find-node.js
-│   └── find-node.cmd
+│   ├── find-node.cmd
+│   ├── alert-watcher.ps1        # Vigilante de alertas (corre en sesión del usuario)
+│   └── install-alert-watcher.bat # Instala vigilante en Startup del usuario
 ├── tests/                   # Tests unitarios
 │   ├── filenameParser.test.js
 │   ├── fileProcessor.test.js
@@ -298,12 +336,20 @@ Oracle Forms (Imprime_Recibo)
 watchFolder (D:\Impresiones)
   │ detectado por chokidar
   ▼
-CBS Print Service
+CBS Print Service (Session 0)
   │ printDirect() → Winspool API (Win32)
-  ▼
-Impresora matricial
-  ▼
-historyFolder (MOVE) o eliminación (DELETE)
+  │
+  ├──► Impresora matricial
+  │      ▼
+  │    historyFolder (MOVE) o eliminación (DELETE)
+  │
+  └──► C:\Impresiones\Alertas\ (archivo .txt)
+         │
+         ▼
+       alert-watcher.ps1 (Session 3 - escritorio del usuario)
+         │ detecta archivo
+         ▼
+       MessageBox nativo de Windows
 ```
 
 ---
@@ -328,3 +374,5 @@ historyFolder (MOVE) o eliminación (DELETE)
 | 1.1.0 | Jul 2026 | Modo GDI, health check, status.bat, tests, config.example.json, pollingIntervalMs |
 | 1.2.0 | Jul 2026 | Notificaciones toast de Windows, parámetro 44 para control por archivo, configuración toastEnabled/toastOnSuccess/toastOnError |
 | 1.6.0 | Jul 2026 | Sincronización de versiones en todos los archivos de configuración |
+| 1.7.0 | Jul 2026 | Eliminación de dependencia node-notifier, notificaciones nativas via mshta.exe |
+| 1.8.0 | Jul 2026 | Arquitectura de notificaciones dual: servicio escribe archivos + vigilante (alert-watcher.ps1) muestra MessageBox en la sesión del usuario. Eliminación de node-notifier. Instalación automática del vigilante en Startup. |
