@@ -2,34 +2,24 @@
 :: =============================================================================
 :: install-alert-watcher.bat  –  CBS Print Service
 ::
-:: Registra el vigilante de alertas en la carpeta Startup del usuario actual.
-:: Se ejecuta automáticamente durante la post-instalación.
+:: Registra el vigilante de alertas como tarea programada de Windows.
+:: Se ejecuta automaticamente durante la post-instalacion.
 :: =============================================================================
 
 setlocal
 
-:: Carpeta Startup del usuario
-set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+echo Instalando vigilante de alertas via Task Scheduler...
 
-:: Ruta del script de vigilancia (misma carpeta que este .bat)
-set "WATCHER_PS1=%~dp0alert-watcher.ps1"
+:: Lanzar PowerShell para registrar la tarea programada
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-alert-watcher-scheduled.ps1"
 
-:: Archivo BAT que se ejecuta al inicio de sesión
-set "BAT_FILE=%STARTUP%\CBSAlertWatcher.bat"
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Fallo al instalar el vigilante de alertas.
+    exit /b 1
+)
 
-echo Instalando vigilante de alertas en Startup del usuario...
-
-:: Crear BAT en Startup que lanza el vigilante de forma invisible
-(
-echo @echo off
-echo :loop
-echo powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%WATCHER_PS1%"
-echo timeout /t 5 /nobreak ^>nul
-echo goto loop
-) > "%BAT_FILE%"
-
-echo [OK] Vigilante instalado en: %BAT_FILE%
-echo     Se ejecutara automaticamente al iniciar sesion.
+echo.
+echo El vigilante se ejecutara automaticamente al iniciar sesion.
 echo.
 
 endlocal

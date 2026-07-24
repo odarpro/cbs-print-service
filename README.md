@@ -376,3 +376,4 @@ CBS Print Service (Session 0)
 | 1.6.0 | Jul 2026 | Sincronización de versiones en todos los archivos de configuración |
 | 1.7.0 | Jul 2026 | Eliminación de dependencia node-notifier, notificaciones nativas via mshta.exe |
 | 1.8.0 | Jul 2026 | Arquitectura de notificaciones dual: servicio escribe archivos + vigilante (alert-watcher.ps1) muestra MessageBox en la sesión del usuario. Eliminación de node-notifier. Instalación automática del vigilante en Startup. |
+| 1.9.0 | Jul 2026 | Fix ventana PowerShell al iniciar sesión: wrapper VBS oculto (launch-alert-watcher.vbs). Fix alertas no mostradas: alert-watcher.ps1 ahora lee ruta desde config.json. Tarea programada CBSAlertWatcher con trigger inmediato tras registro. |

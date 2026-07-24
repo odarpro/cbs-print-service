@@ -74,6 +74,19 @@ if exist "%INSTALL_DIR%\scripts\uninstall-service.js" (
     echo Script uninstall-service.js no encontrado en %INSTALL_DIR%. >> "%UNINSTALL_LOG%"
 )
 
+:: ── 1b) Eliminar tarea programada del vigilante de alertas ─────────────────
+echo [1b] Eliminando tarea programada del vigilante de alertas...
+if exist "%INSTALL_DIR%\scripts\install-alert-watcher-scheduled.ps1" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\scripts\install-alert-watcher-scheduled.ps1" -Uninstall >> "%UNINSTALL_LOG%" 2>&1
+) else (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Unregister-ScheduledTask -TaskName 'CBSAlertWatcher' -TaskPath '\CBS Print Service\' -Confirm:`$false -ErrorAction SilentlyContinue" >> "%UNINSTALL_LOG%" 2>&1
+)
+:: También eliminar bat legacy de Startup si existe
+if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CBSAlertWatcher.bat" (
+    del /Q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CBSAlertWatcher.bat" >> "%UNINSTALL_LOG%" 2>&1
+    echo Bat legacy de Startup eliminado. >> "%UNINSTALL_LOG%"
+)
+
 :: ── 2) Fallback: detener y eliminar servicio usando PowerShell/sc ────────────
 echo.
 echo [2/3] Asegurando que el servicio esté detenido y eliminado (fallback)...
