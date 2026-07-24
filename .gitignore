@@ -1,0 +1,14 @@
+# Dependencias
+node_modules/
+
+# Visual Studio
+.vs/
+
+# Archivos compilados
+dist/
+
+# Configuración local
+config.json
+
+# Logs
+*.log
