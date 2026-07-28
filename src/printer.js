@@ -103,7 +103,9 @@ async function printFile(opts) {
     content: preloadedContent,
     printMethod  = 'DIRECT',
     bold         = false,
-    maxCharsPerLine = 40
+    maxCharsPerLine = 40,
+    fontName,
+    fontSize
   } = opts;
 
   const log = logger.get();
@@ -119,8 +121,8 @@ async function printFile(opts) {
 
   // 2. Aplicar modo GDI si está configurado
   if (printMethod === 'GDI') {
-    content = gdiPrint.renderGdi(content, { maxCharsPerLine, bold });
-    log.debug('Modo GDI aplicado', { maxCharsPerLine, bold });
+    content = gdiPrint.renderGdi(content, { maxCharsPerLine, bold, fontName, fontSize });
+    log.debug('Modo GDI aplicado', { maxCharsPerLine, bold, fontName, fontSize });
   } else {
     log.debug('Modo DIRECT aplicado');
   }

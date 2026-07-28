@@ -263,11 +263,23 @@ class FileProcessor {
       ? parseInt(rawWidth, 10)
       : (printerCfg.maxCharsPerLine || 40);
 
+    const rawFontName = parsed && parsed.params.f;
+    const resolvedFontName = rawFontName !== undefined
+      ? rawFontName
+      : (printerCfg.fontName || 'Courier New');
+
+    const rawFontSize = parsed && parsed.params.t;
+    const resolvedFontSize = rawFontSize !== undefined
+      ? parseInt(rawFontSize, 10)
+      : (printerCfg.fontSize || 9);
+
     log.debug('Opciones de impresión resueltas', {
       printerName:  resolvedPrinterName,
       printMethod:  resolvedPrintMethod,
       bold:         resolvedBold,
       maxCharsPerLine: resolvedMaxChars,
+      fontName:     resolvedFontName,
+      fontSize:     resolvedFontSize,
       contentFilePath
     });
 
@@ -287,7 +299,9 @@ class FileProcessor {
           content,
           printMethod:    resolvedPrintMethod,
           bold:           resolvedBold,
-          maxCharsPerLine: resolvedMaxChars
+          maxCharsPerLine: resolvedMaxChars,
+          fontName:       resolvedFontName,
+          fontSize:       resolvedFontSize
         });
 
         // ── Éxito ──────────────────────────────────────────────────────

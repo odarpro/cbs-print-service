@@ -11,16 +11,16 @@
   "printers": {
     "voucher": {
       "name":            "Recibo",
-      "fontName":        "Courier New",
-      "fontSize":        9,
+      "fontName":        "Calibri",
+      "fontSize":        10,
       "bold":            false,
       "maxCharsPerLine": 40,
       "copies":          1
     },
     "slip": {
       "name":            "Cheques",
-      "fontName":        "Courier New",
-      "fontSize":        9,
+      "fontName":        "Calibri",
+      "fontSize":        10,
       "bold":            false,
       "maxCharsPerLine": 40,
       "copies":          1

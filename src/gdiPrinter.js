@@ -54,20 +54,54 @@ function formatLines(text, maxCharsPerLine, bold) {
   return formatted.join('\n');
 }
 
+function escFont(fontName) {
+  if (!fontName) return '';
+  const name = fontName.replace(/_/g, ' ').toLowerCase();
+  let code;
+  if (name.includes('draft')) code = 0;
+  else if (name.includes('roman') || name.includes('times')) code = 1;
+  else if (name.includes('sans') || name.includes('arial') || name.includes('helvetica')) code = 2;
+  else if (name.includes('courier')) code = 3;
+  else if (name.includes('prestige')) code = 4;
+  else if (name.includes('script')) code = 5;
+  else if (name.includes('ocr')) code = 6;
+  else code = 0;
+  return ESC + 'k' + String.fromCharCode(code);
+}
+
+function escSize(fontSize) {
+  if (fontSize === undefined || fontSize === null) return '';
+  const size = parseInt(fontSize, 10);
+  if (isNaN(size)) return '';
+  if (size <= 8) return '\x0F';
+  if (size <= 11) return ESC + 'g';
+  if (size <= 14) return ESC + 'M';
+  return ESC + 'P';
+}
+
 function renderGdi(text, options = {}) {
   const {
     maxCharsPerLine = 40,
-    bold = false
+    bold = false,
+    fontName,
+    fontSize
   } = options;
 
   const log = logger.get();
   log.debug('Renderizando texto en modo GDI', {
     charCount: text.length,
     maxCharsPerLine,
-    bold
+    bold,
+    fontName,
+    fontSize
   });
 
-  return formatLines(text, maxCharsPerLine, bold);
+  const hasFontSettings = fontName !== undefined || fontSize !== undefined;
+  const header = hasFontSettings ? escFont(fontName) + escSize(fontSize) : '';
+  const footer = hasFontSettings ? ESC + '@' : '';
+  const body = formatLines(text, maxCharsPerLine, bold);
+
+  return header + body + footer;
 }
 
-module.exports = { renderGdi, wordWrap, formatLines };
+module.exports = { renderGdi, wordWrap, formatLines, escFont, escSize };
