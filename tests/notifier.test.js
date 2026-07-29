@@ -159,7 +159,7 @@ describe('notifier.notifyInvalidFile()', () => {
   it('no lanza errores con lista de errores', () => {
     notifier.init({ toastEnabled: true, toastOnError: true });
     assert.doesNotThrow(() => {
-      notifier.notifyInvalidFile('Rec001.txt', ['Parámetro m inválido', 'Parámetro t fuera de rango'], null);
+      notifier.notifyInvalidFile('Rec001.txt', ['Parámetro t fuera de rango'], null);
     });
   });
 });

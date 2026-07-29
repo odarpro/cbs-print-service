@@ -46,7 +46,7 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `logFolder` | string | `D:\Impresiones\Logs` | Carpeta de logs rotativos diarios |
 | `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
-| `printMethod` | string | `"DIRECT"` | Modo de impresión: `"DIRECT"` o `"GDI"` |
+| `printMethod` | string | `"DIRECT"` | Modo de impresión: `"DIRECT"` (RAW directo al spooler) o `"GDI"` (word-wrap, ESC/P para fuente/negrita). Por archivo: `43A` = DIRECT, `43I` = GDI |
 | `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
 | `fileAction` | string | `"MOVE"` | Post-impresión: `"MOVE"` (a historyFolder) o `"DELETE"` |
 | `pollingIntervalMs` | number | `1000` | Intervalo de sondeo en ms para detectar archivos |
@@ -80,12 +80,11 @@ printers.slip     → para archivos Val*.txt
 Oracle Forms puede incrustar parámetros en el nombre del archivo separados por `~`:
 
 ```
-Rec~m0~t9~fCourier_New~b0~a1contenido.txt~p1EPSON_LX-350~w140~43S.txt
+Rec~t9~fCourier_New~b0~a1contenido.txt~p1EPSON_LX-350~w140~43S.txt
 ```
 
 | Código | Parámetro | Valores | Default |
 |---|---|---|---|
-| `m` | `cMetodo` | `0`=Original, `1`=Directo | `0` |
 | `t` | `cTamañoLetra` | `1`–`72` | `9` |
 | `f` | `cNombreFont` | nombre de la fuente | `Courier_New` |
 | `b` | `cBold` | `0`=No, `1`=Sí | `0` |
@@ -105,8 +104,8 @@ Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser
 
 | Modo | `printMethod` | Descripción |
 |---|---|---|
-| **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `/43 S`. |
-| **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/P para negrita si `bold=true`, y envía el texto formateado. Equivale a `/43 N`. |
+| **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `43A`. |
+| **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/P para fuente, tamaño y negrita. El texto se renderiza formateado antes de enviarse al spooler. Equivale a `43I`. |
 
 ---
 
@@ -164,9 +163,9 @@ En `config.json`:
 Se puede sobreescribir el comportamiento por archivo usando el parámetro `44` en el nombre:
 
 ```
-Rec~m0~44S~a1contenido.txt    → Forzar notificación para este archivo
-Rec~m0~44I~a1contenido.txt    → Deshabilitar notificación para este archivo
-Rec~m0~a1contenido.txt        → Usa el valor de config.json
+Rec~44S~a1contenido.txt    → Forzar notificación para este archivo
+Rec~44I~a1contenido.txt    → Deshabilitar notificación para este archivo
+Rec~a1contenido.txt        → Usa el valor de config.json
 ```
 
 ### Prioridad de resolución
@@ -377,3 +376,4 @@ CBS Print Service (Session 0)
 | 1.7.0 | Jul 2026 | Eliminación de dependencia node-notifier, notificaciones nativas via mshta.exe |
 | 1.8.0 | Jul 2026 | Arquitectura de notificaciones dual: servicio escribe archivos + vigilante (alert-watcher.ps1) muestra MessageBox en la sesión del usuario. Eliminación de node-notifier. Instalación automática del vigilante en Startup. |
 | 1.9.0 | Jul 2026 | Fix ventana PowerShell al iniciar sesión: wrapper VBS oculto (launch-alert-watcher.vbs). Fix alertas no mostradas: alert-watcher.ps1 ahora lee ruta desde config.json. Tarea programada CBSAlertWatcher con trigger inmediato tras registro. |
+| 1.9.1 | Jul 2026 | Eliminado parámetro `m` (cMetodo) del parser de nombres — era legacy y no afectaba la impresión. Corrección de valores `43S`/`43N` a `43A`/`43I` en documentación. |
