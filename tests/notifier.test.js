@@ -127,14 +127,14 @@ describe('notifier.notifyPrintSuccess()', () => {
   it('no lanza errores con parámetros válidos', () => {
     notifier.init({ toastEnabled: true, toastOnSuccess: true });
     assert.doesNotThrow(() => {
-      notifier.notifyPrintSuccess('Rec001.txt', 'EPSON LX-350', null);
+      notifier.notifyPrintSuccess('Rec001.txt', 'MTU-940', null);
     });
   });
 
   it('no envía toast cuando toastOnSuccess es false', () => {
     notifier.init({ toastEnabled: true, toastOnSuccess: false });
     assert.doesNotThrow(() => {
-      notifier.notifyPrintSuccess('Rec001.txt', 'EPSON LX-350', null);
+      notifier.notifyPrintSuccess('Rec001.txt', 'MTU-940', null);
     });
   });
 });

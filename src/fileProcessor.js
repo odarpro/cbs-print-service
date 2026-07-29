@@ -248,27 +248,39 @@ class FileProcessor {
       return;
     }
 
-    const rawMethod43 = parsed && parsed.params['43'];
-    const resolvedPrintMethod = rawMethod43
-      ? (rawMethod43.toUpperCase() === 'I' ? 'GDI' : 'DIRECT')
-      : (cfg.printMethod || 'DIRECT');
+    const rawMethod43  = parsed && parsed.params['43'];
+    const rawFontName  = parsed && parsed.params.f;
+    const rawFontSize  = parsed && parsed.params.t;
+    const rawBold      = parsed && parsed.params.b;
+    const rawWidth     = parsed && parsed.params.w1;
 
-    const rawBold = parsed && parsed.params.b;
+    const hasGdiParams = rawFontName !== undefined
+      || rawFontSize !== undefined
+      || rawBold !== undefined
+      || rawWidth !== undefined;
+
+    let resolvedPrintMethod;
+    if (rawMethod43) {
+      resolvedPrintMethod = rawMethod43.toUpperCase() === 'I' ? 'GDI' : 'DIRECT';
+    } else if (hasGdiParams) {
+      resolvedPrintMethod = 'GDI';
+      log.debug('Modo GDI auto-activado por parámetros de fuente en el filename');
+    } else {
+      resolvedPrintMethod = cfg.printMethod || 'DIRECT';
+    }
+
     const resolvedBold = rawBold !== undefined
       ? (rawBold.toUpperCase() === 'S')
       : (printerCfg.bold || false);
 
-    const rawWidth = parsed && parsed.params.w1;
     const resolvedMaxChars = rawWidth !== undefined
       ? parseInt(rawWidth, 10)
       : (printerCfg.maxCharsPerLine || 40);
 
-    const rawFontName = parsed && parsed.params.f;
     const resolvedFontName = rawFontName !== undefined
       ? rawFontName
       : (printerCfg.fontName || 'Courier New');
 
-    const rawFontSize = parsed && parsed.params.t;
     const resolvedFontSize = rawFontSize !== undefined
       ? parseInt(rawFontSize, 10)
       : (printerCfg.fontSize || 9);

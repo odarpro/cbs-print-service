@@ -60,7 +60,7 @@ function escFont(fontName) {
   let code;
   if (name.includes('draft')) code = 0;
   else if (name.includes('roman') || name.includes('times')) code = 1;
-  else if (name.includes('sans') || name.includes('arial') || name.includes('helvetica')) code = 2;
+  else if (name.includes('sans') || name.includes('arial') || name.includes('helvetica') || name.includes('calibri')) code = 2;
   else if (name.includes('courier')) code = 3;
   else if (name.includes('prestige')) code = 4;
   else if (name.includes('script')) code = 5;
