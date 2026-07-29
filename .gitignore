@@ -5,7 +5,7 @@ node_modules/
 .vs/
 
 # Archivos compilados
-dist/
+#dist/
 
 # Configuración local
 config.json
