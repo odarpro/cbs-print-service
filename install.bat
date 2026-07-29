@@ -196,6 +196,27 @@ if %errorLevel% neq 0 (
 )
 echo        Servicio registrado e iniciado (si no, revisa %SVC_LOG%).
 echo Servicio registrado. >> "%INSTALL_LOG%"
+
+:: ── Verificar que el servicio esté corriendo ──
+echo Verificando estado del servicio...
+net start CBSPrintService >nul 2>&1
+if !errorLevel! neq 0 (
+    echo [WARN] El servicio no pudo iniciarse automaticamente.
+    echo        Iniciando manualmente via net start...
+    net start CBSPrintService >nul 2>&1
+    if !errorLevel! neq 0 (
+        echo [WARN] No se pudo iniciar el servicio. Inicielo manualmente con:
+        echo        net start CBSPrintService
+        echo        o desde Servicios (services.msc)
+        echo Servicio NO iniciado. >> "%INSTALL_LOG%"
+    ) else (
+        echo        Servicio iniciado. [OK]
+        echo Servicio iniciado via net start. >> "%INSTALL_LOG%"
+    )
+) else (
+    echo        Servicio iniciado. [OK]
+    echo Servicio ya estaba corriendo. >> "%INSTALL_LOG%"
+)
 pause 
 
 :: ── Fin ──────────────────────────────────────────────────────────────────────

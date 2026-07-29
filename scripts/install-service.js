@@ -56,6 +56,12 @@ const svc = new Service({
 
 svc.on('install', () => {
   console.log(`\n[OK] Servicio "${SERVICE_NAME}" instalado correctamente.`);
+  console.log('Iniciando servicio...');
+  svc.start();
+});
+
+svc.on('start', () => {
+  console.log(`[OK] Servicio "${SERVICE_NAME}" iniciado correctamente.`);
   clearTimeout(timeout);
   process.exit(0);
 });
