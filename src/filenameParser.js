@@ -5,9 +5,8 @@ const path = require('path');
 const PARAM_DEFS = [
   { code: '43', key: 'cImpresionDirecta', desc: 'Tipo de impresión (A=Activo/Directa, I=Inactivo/GDI)', defaultValue: 'A' },
   { code: '44', key: 'cNotificacion',    desc: 'Notificación toast (A=Activo/Habilitado, I=Inactivo/Deshabilitado)', defaultValue: null },
-  { code: 'a1', key: 'cNombreArchivo',    desc: 'Nombre del archivo .txt a imprimir',         defaultValue: null },
-  { code: 'p1', key: 'cPrinterName',      desc: 'Nombre de la impresora destino',              defaultValue: null },
-  { code: 'w1', key: 'cAnchoMaximo',      desc: 'Ancho máximo de caracteres por línea',        defaultValue: '40' },
+  { code: 'p',  key: 'cPrinterName',      desc: 'Nombre de la impresora destino',              defaultValue: null },
+  { code: 'w',  key: 'cAnchoMaximo',      desc: 'Ancho máximo de caracteres por línea',        defaultValue: '40' },
   { code: 't',  key: 'cTamañoLetra',      desc: 'Tamaño de la fuente',                         defaultValue: '9' },
   { code: 'f',  key: 'cNombreFont',       desc: 'Nombre de la fuente',                         defaultValue: 'Courier_New' },
   { code: 'b',  key: 'cBold',             desc: 'Negrita (S=Negrita, N=No negrita)',              defaultValue: 'N' }
@@ -87,14 +86,10 @@ function validate(parsed) {
     }
   }
 
-  if (p.a1 !== undefined && p.a1.length === 0) {
-    errors.push('cNombreArchivo (a1) no puede estar vacío.');
-  }
-
-  if (p.w1 !== undefined) {
-    const width = parseInt(p.w1, 10);
+  if (p.w !== undefined) {
+    const width = parseInt(p.w, 10);
     if (isNaN(width) || width < 10 || width > 255) {
-      errors.push(`cAnchoMaximo (w1) inválido: "${p.w1}". Debe ser un número entre 10 y 255.`);
+      errors.push(`cAnchoMaximo (w) inválido: "${p.w}". Debe ser un número entre 10 y 255.`);
     }
   }
 
@@ -120,7 +115,7 @@ function validate(parsed) {
 }
 
 function buildExample() {
-  return 'Rec~t9~fCourier_New~bN~a1contenido.txt~p1EPSON_LX-350~w140~43A.txt';
+  return 'Rec~t9~fCourier_New~bN~pMTU-950~w40~43A.txt';
 }
 
 function describeFormat() {
@@ -145,12 +140,9 @@ function describeFormat() {
   lines.push(`  ${buildExample()}`);
   lines.push('');
   lines.push('Equivalente a:');
-  lines.push('  /t9  /fCourier_New  /bN  /a1contenido.txt  /p1EPSON_LX-350  /w140  /43A');
+  lines.push('  /t9  /fCourier_New  /bN  /MTU-950  /w40  /43A');
   lines.push('');
   lines.push('Notas:');
-  lines.push('  • El valor de a1 debe ser solo el nombre del archivo (sin ruta).');
-  lines.push('    El archivo debe estar en la misma carpeta que el archivo');
-  lines.push('    de activación (trigger).');
   lines.push('  • El carácter "~" está reservado como separador y no puede');
   lines.push('    usarse dentro de los valores de los parámetros.');
   lines.push('  • Los caracteres \\ y / están prohibidos en nombres de archivo');

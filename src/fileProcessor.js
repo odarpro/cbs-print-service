@@ -205,11 +205,8 @@ class FileProcessor {
       hasParams: parsed ? parsed.hasParams : false
     });
 
-    // 1. Determinar archivo de contenido (usa a1 si está presente, sino el archivo detectado)
-    const triggerDir = path.dirname(filePath);
-    const contentFilePath = (parsed && parsed.hasParams && parsed.params.a1)
-      ? path.resolve(triggerDir, parsed.params.a1)
-      : filePath;
+    // 1. El archivo trigger es el que contiene el contenido a imprimir
+    const contentFilePath = filePath;
 
     // 2. Esperar a que el archivo de contenido esté completamente escrito
     await waitForFileStable(contentFilePath, cfg.fileStabilizeMs || 500);
@@ -239,7 +236,7 @@ class FileProcessor {
     //    - Valores de config.json como fallback
     //    - Valores por defecto hardcodeados como último recurso
 
-    const resolvedPrinterName = (parsed && parsed.params.p1) || printerCfg.name;
+    const resolvedPrinterName = (parsed && parsed.params.p) || printerCfg.name;
     if (!resolvedPrinterName) {
       log.error('No hay impresora configurada para el tipo de documento', { docType });
       const parsedParams = parsed && parsed.params ? parsed.params : null;
@@ -252,7 +249,7 @@ class FileProcessor {
     const rawFontName  = parsed && parsed.params.f;
     const rawFontSize  = parsed && parsed.params.t;
     const rawBold      = parsed && parsed.params.b;
-    const rawWidth     = parsed && parsed.params.w1;
+    const rawWidth     = parsed && parsed.params.w;
 
     const hasGdiParams = rawFontName !== undefined
       || rawFontSize !== undefined

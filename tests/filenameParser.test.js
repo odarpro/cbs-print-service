@@ -30,36 +30,34 @@ describe('filenameParser.parse()', () => {
 
   it('extrae todos los parámetros de un nombre completo', () => {
     const result = filenameParser.parse(
-      'Rec~t9~fCourier_New~bN~a1contenido.txt~p1EPSON_LX-350~w140~43A.txt'
+      'Rec~t9~fCourier_New~bN~pMTU-950~w40~43A.txt'
     );
     assert.equal(result.prefix, 'voucher');
     assert.equal(result.hasParams, true);
     assert.equal(result.params.t, '9');
     assert.equal(result.params.f, 'Courier_New');
     assert.equal(result.params.b, 'N');
-    assert.equal(result.params.a1, 'contenido.txt');
-    assert.equal(result.params.p1, 'EPSON_LX-350');
-    assert.equal(result.params.w1, '40');
+    assert.equal(result.params.p, 'MTU-950');
+    assert.equal(result.params.w, '40');
     assert.equal(result.params['43'], 'A');
   });
 
   it('extrae parámetros con modo GDI (43=I) y bold activo (b=S)', () => {
     const result = filenameParser.parse(
-      'Val~t12~fArial~bS~a1reporte.txt~p1Zebra_ZPL~w180~43I.txt'
+      'Val~t12~fArial~bS~pZebra_ZPL~w80~43I.txt'
     );
     assert.equal(result.prefix, 'slip');
     assert.equal(result.params.t, '12');
     assert.equal(result.params.f, 'Arial');
     assert.equal(result.params.b, 'S');
-    assert.equal(result.params.a1, 'reporte.txt');
-    assert.equal(result.params.p1, 'Zebra_ZPL');
-    assert.equal(result.params.w1, '80');
+    assert.equal(result.params.p, 'Zebra_ZPL');
+    assert.equal(result.params.w, '80');
     assert.equal(result.params['43'], 'I');
   });
 
   it('extrae parámetro 44=A (notificación habilitada)', () => {
     const result = filenameParser.parse(
-      'Rec~t9~a1test.txt~p1Printer~w140~44A.txt'
+      'Rec~t9~pPrinter~w40~44A.txt'
     );
     assert.equal(result.prefix, 'voucher');
     assert.equal(result.params['44'], 'A');
@@ -67,7 +65,7 @@ describe('filenameParser.parse()', () => {
 
   it('extrae parámetro 44=I (notificación deshabilitada)', () => {
     const result = filenameParser.parse(
-      'Rec~t9~a1test.txt~p1Printer~w140~44I.txt'
+      'Rec~t9~pPrinter~w40~44I.txt'
     );
     assert.equal(result.prefix, 'voucher');
     assert.equal(result.params['44'], 'I');
@@ -75,7 +73,7 @@ describe('filenameParser.parse()', () => {
 
   it('extrae parámetros 43 y 44 juntos', () => {
     const result = filenameParser.parse(
-      'Rec~t9~a1test.txt~p1Printer~w140~43A~44I.txt'
+      'Rec~t9~pPrinter~w40~43A~44I.txt'
     );
     assert.equal(result.params['43'], 'A');
     assert.equal(result.params['44'], 'I');
@@ -94,15 +92,15 @@ describe('filenameParser.parse()', () => {
   });
 
   it('extrae solo parámetros presentes (parcial)', () => {
-    const result = filenameParser.parse('Rec~w180.txt');
+    const result = filenameParser.parse('Rec~w80.txt');
     assert.equal(result.prefix, 'voucher');
-    assert.equal(result.params.w1, '80');
+    assert.equal(result.params.w, '80');
     assert.equal(result.params.t, undefined);
   });
 
   it('maneja valor de parámetro con guiones y números', () => {
-    const result = filenameParser.parse('Rec~p1EPSON-LX-350_01.txt');
-    assert.equal(result.params.p1, 'EPSON-LX-350_01');
+    const result = filenameParser.parse('Rec~pEPSON-LX-350_01.txt');
+    assert.equal(result.params.p, 'EPSON-LX-350_01');
   });
 
   it('retorna hasParams=false para Rec seguido solo de números', () => {
@@ -121,7 +119,7 @@ describe('filenameParser.parse()', () => {
 describe('filenameParser.validate()', () => {
 
   it('acepta parámetros válidos', () => {
-    const parsed = filenameParser.parse('Rec~t9~fCourier_New~bN~a1test.txt~p1Printer~w140~43A.txt');
+    const parsed = filenameParser.parse('Rec~t9~fCourier_New~bN~pPrinter~w40~43A.txt');
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, true);
     assert.deepEqual(result.errors, []);
@@ -141,8 +139,8 @@ describe('filenameParser.validate()', () => {
     assert.ok(result.errors[0].includes('cTamañoLetra'));
   });
 
-  it('rechaza cAnchoMaximo (w1) fuera de rango', () => {
-    const parsed = filenameParser.parse('Rec~w15.txt');
+  it('rechaza cAnchoMaximo (w) fuera de rango', () => {
+    const parsed = filenameParser.parse('Rec~w5.txt');
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, false);
     assert.ok(result.errors[0].includes('cAnchoMaximo'));
@@ -182,7 +180,7 @@ describe('filenameParser.validate()', () => {
   });
 
   it('retorna múltiples errores cuando varios parámetros son inválidos', () => {
-    const parsed = filenameParser.parse('Rec~tY~bZ~w15.txt');
+    const parsed = filenameParser.parse('Rec~tY~bZ~w5.txt');
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, false);
     assert.ok(result.errors.length >= 2);
@@ -217,6 +215,5 @@ describe('filenameParser.buildExample()', () => {
     assert.ok(example.startsWith('Rec'));
     assert.ok(example.endsWith('.txt'));
     assert.ok(example.includes('~43A'));
-    assert.ok(example.includes('contenido.txt'));
   });
 });

@@ -80,17 +80,16 @@ printers.slip     → para archivos Val*.txt
 Oracle Forms puede incrustar parámetros en el nombre del archivo separados por `~`:
 
 ```
-Rec~t9~fCourier_New~b0~a1contenido.txt~p1EPSON_LX-350~w140~43S.txt
+Rec~t9~fCourier_New~b0~pMTU-950~w40~43S.txt
 ```
 
 | Código | Parámetro | Valores | Default |
 |---|---|---|---|
 | `t` | `cTamañoLetra` | `1`–`72` | `9` |
 | `f` | `cNombreFont` | nombre de la fuente | `Courier_New` |
-| `b` | `cBold` | `0`=No, `1`=Sí | `0` |
-| `a1` | `cNombreArchivo` | nombre del .txt a imprimir (sin ruta) | — |
-| `p1` | `cPrinterName` | nombre de impresora destino | — |
-| `w1` | `cAnchoMaximo` | `10`–`255` | `40` |
+| `b` | `cBold` | `S`=Negrita, `N`=No negrita | `N` |
+| `p` | `cPrinterName` | nombre de impresora destino | — |
+| `w` | `cAnchoMaximo` | `10`–`255` | `40` |
 | `43` | `cImpresionDirecta` | `S`=Directa, `N`=GDI | `S` |
 | `44` | `cNotificacion` | `S`=Habilitada, `N`=Deshabilitada | Usa `toastEnabled` de config |
 

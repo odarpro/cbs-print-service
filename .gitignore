@@ -12,3 +12,6 @@ config.json
 
 # Logs
 *.log
+
+# test-output 
+test-output
