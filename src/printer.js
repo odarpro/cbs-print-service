@@ -119,10 +119,24 @@ async function printFile(opts) {
     }
   })();
 
-  // 2. Aplicar modo GDI si está configurado
+  // 2. Aplicar modo según configuración
   if (printMethod === 'GDI') {
     content = gdiPrint.renderGdi(content, { maxCharsPerLine, bold, fontName, fontSize });
     log.debug('Modo GDI aplicado', { maxCharsPerLine, bold, fontName, fontSize });
+  } else if (printMethod === 'PDF') {
+    const pdfPrinter = require('./pdfPrinter');
+    const { resolvedName, status } = getPrinterInfo(printerName);
+    if (!resolvedName) {
+      throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
+    }
+    if (!status.ok) {
+      throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
+    }
+    const pdfBuffer = await pdfPrinter.renderPdfBuffer(content, {
+      fontName, fontSize, bold, maxCharsPerLine
+    });
+    await pdfPrinter.printPdf(pdfBuffer, resolvedName, docTitle);
+    return;
   } else {
     log.debug('Modo DIRECT aplicado');
   }

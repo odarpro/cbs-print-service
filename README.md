@@ -1,6 +1,12 @@
 # CBS Print Service
 
-Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watchFolder`, detecta archivos `Rec*.txt` / `Val*.txt` generados por Oracle Forms y los envía a una impresora matricial vía Winspool API **sin invocar cmd.exe, powershell.exe ni procesos externos** (cumple Auditoría).
+Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watchFolder`, detecta archivos `Rec*.txt` / `Val*.txt` generados por Oracle Forms y los envía a impresora en tres modos:
+
+| Modo | Código | Descripción |
+|------|--------|-------------|
+| **DIRECT** | `43A` | RAW directo al spooler vía Winspool API — sin procesos externos |
+| **GDI** | `43I` | Word-wrap + códigos ESC/POS para control de fuente/tamaño/negrita en impresoras compatibles |
+| **PDF** | `43H` | Renderiza el texto con fuente real mediante PDFKit y lo imprime a través del driver de Windows (más fiel al original VB.NET)
 
 ---
 
@@ -25,7 +31,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_<version>_Setup.exe`.
+2. Genera `dist\CBSPrintService_2.1.0_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -46,7 +52,7 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `logFolder` | string | `D:\Impresiones\Logs` | Carpeta de logs rotativos diarios |
 | `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
-| `printMethod` | string | `"DIRECT"` | Modo de impresión: `"DIRECT"` (RAW directo al spooler) o `"GDI"` (word-wrap, ESC/P para fuente/negrita). Por archivo: `43A` = DIRECT, `43I` = GDI |
+| `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS) o `"PDF"` (renderizado PDF + driver). Por archivo: `43A` = DIRECT, `43I` = GDI, `43H` = PDF/Híbrido |
 | `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
 | `fileAction` | string | `"MOVE"` | Post-impresión: `"MOVE"` (a historyFolder) o `"DELETE"` |
 | `pollingIntervalMs` | number | `1000` | Intervalo de sondeo en ms para detectar archivos |
@@ -67,10 +73,10 @@ printers.slip     → para archivos Val*.txt
 | Sub-campo | Tipo | Default | Descripción |
 |---|---|---|---|
 | `name` | string | `"EPSON LX-350"` | Nombre parcial o exacto de la impresora |
-| `fontName` | string | `"Courier New"` | Solo modo GDI |
-| `fontSize` | number | `9` | Solo modo GDI |
-| `bold` | boolean | `false` | Solo modo GDI |
-| `maxCharsPerLine` | number | `40` | Solo modo GDI (word-wrap) |
+| `fontName` | string | `"Courier New"` | Modos GDI y PDF |
+| `fontSize` | number | `9` | Modos GDI y PDF |
+| `bold` | boolean | `false` | Modos GDI y PDF |
+| `maxCharsPerLine` | number | `40` | Word-wrap en GDI y PDF |
 | `copies` | number | `1` | Número de copias |
 
 ---
@@ -90,7 +96,7 @@ Rec~t9~fCourier_New~b0~pMTU-950~w40~43S.txt
 | `b` | `cBold` | `S`=Negrita, `N`=No negrita | `N` |
 | `p` | `cPrinterName` | nombre de impresora destino | — |
 | `w` | `cAnchoMaximo` | `10`–`255` | `40` |
-| `43` | `cImpresionDirecta` | `S`=Directa, `N`=GDI | `S` |
+| `43` | `cImpresionDirecta` | `A`=Directa, `I`=GDI, `H`=Híbrido/PDF | `A` |
 | `44` | `cNotificacion` | `S`=Habilitada, `N`=Deshabilitada | Usa `toastEnabled` de config |
 
 Cuando un archivo incluye parámetros, estos tienen prioridad sobre `config.json`. Los nombres legacy sin `~` (ej: `Rec20260706_143022.txt`) usan solo la configuración del JSON.
@@ -104,7 +110,8 @@ Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser
 | Modo | `printMethod` | Descripción |
 |---|---|---|
 | **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `43A`. |
-| **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/P para fuente, tamaño y negrita. El texto se renderiza formateado antes de enviarse al spooler. Equivale a `43I`. |
+| **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/POS para fuente, tamaño y negrita. El texto se renderiza formateado antes de enviarse al spooler. **Requiere impresora compatible con ESC/POS.** Equivale a `43I`. |
+| **PDF** | `"PDF"` | Renderiza el texto con word-wrap en un PDF usando **PDFKit** con mapeo a fuentes PDF estándar (Calibri/Arial → Helvetica, Courier New → Courier, etc.). El PDF se envía al driver de Windows mediante `Start-Process -Verb PrintTo`, produciendo un resultado visual similar al `DrawString` de VB.NET. Equivale a `43H`. |
 
 ---
 
@@ -234,7 +241,7 @@ npm run test:watch   # Modo watch
 |---|---|
 | `tests/filenameParser.test.js` | Parseo y validación de nombres de archivo con parámetros |
 | `tests/fileProcessor.test.js` | Cola FIFO, reintentos, post-procesamiento (MOVE/DELETE) |
-| `tests/gdiPrinter.test.js` | Word-wrap, formato GDI, códigos ESC/P |
+| `tests/gdiPrinter.test.js` | Word-wrap, formato GDI, códigos ESC/POS |
 | `tests/printer.test.js` | Resolución de impresora, envío al spooler |
 | `tests/notifier.test.js` | Notificaciones toast, resolución de parámetro 44 |
 
@@ -286,7 +293,8 @@ cbs-print-service/
 │   ├── watcher.js           # Monitoreo de carpeta (chokidar)
 │   ├── fileProcessor.js     # Cola FIFO, reintentos, post-proceso
 │   ├── printer.js           # Envío a impresora vía Winspool API
-│   ├── gdiPrinter.js        # Renderizado modo GDI (word-wrap, ESC/P)
+│   ├── gdiPrinter.js        # Renderizado modo GDI (word-wrap, ESC/POS)
+│   ├── pdfPrinter.js        # Renderizado modo PDF (PDFKit + driver Windows)
 │   ├── logger.js            # Logging rotativo (winston)
 │   ├── filenameParser.js    # Parseo de parámetros en nombre de archivo
 │   └── notifier.js          # Escritura de archivos de alerta para el vigilante
@@ -335,9 +343,12 @@ watchFolder (D:\Impresiones)
   │ detectado por chokidar
   ▼
 CBS Print Service (Session 0)
-  │ printDirect() → Winspool API (Win32)
   │
-  ├──► Impresora matricial
+  │ ├── DIRECT:  printDirect() → Winspool API (RAW)
+  │ ├── GDI:     renderGdi() + printDirect() → Winspool API (RAW con ESC/POS)
+  │ └── PDF:     renderPdfBuffer() → Start-Process -Verb PrintTo → driver de Windows
+  │
+  ├──► Impresora
   │      ▼
   │    historyFolder (MOVE) o eliminación (DELETE)
   │
@@ -377,3 +388,4 @@ CBS Print Service (Session 0)
 | 1.9.0 | Jul 2026 | Fix ventana PowerShell al iniciar sesión: wrapper VBS oculto (launch-alert-watcher.vbs). Fix alertas no mostradas: alert-watcher.ps1 ahora lee ruta desde config.json. Tarea programada CBSAlertWatcher con trigger inmediato tras registro. |
 | 1.9.1 | Jul 2026 | Eliminado parámetro `m` (cMetodo) del parser de nombres — era legacy y no afectaba la impresión. Corrección de valores `43S`/`43N` a `43A`/`43I` en documentación. |
 | 1.9.2 | Jul 2026 | Se realizan correcciones para los parametros de tipo de letra y tamaño de letra. |
+| 2.1.0 | Jul 2026 | Nuevo modo **PDF/Híbrido** (`43H`). Renderiza el texto con fuentes reales mediante PDFKit y lo imprime a través del driver de Windows (`Start-Process -Verb PrintTo`), replicando el comportamiento del `DrawString` de VB.NET. Se agrega módulo `pdfPrinter.js` y dependencia `pdfkit`. |

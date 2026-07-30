@@ -258,7 +258,10 @@ class FileProcessor {
 
     let resolvedPrintMethod;
     if (rawMethod43) {
-      resolvedPrintMethod = rawMethod43.toUpperCase() === 'I' ? 'GDI' : 'DIRECT';
+      const upper = rawMethod43.toUpperCase();
+      if (upper === 'I') resolvedPrintMethod = 'GDI';
+      else if (upper === 'H') resolvedPrintMethod = 'PDF';
+      else resolvedPrintMethod = 'DIRECT';
     } else if (hasGdiParams) {
       resolvedPrintMethod = 'GDI';
       log.debug('Modo GDI auto-activado por parámetros de fuente en el filename');
