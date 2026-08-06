@@ -31,7 +31,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_2.1.0_Setup.exe`.
+2. Genera `dist\CBSPrintService_2.2.0_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -53,6 +53,8 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
 | `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS) o `"PDF"` (renderizado PDF + driver). Por archivo: `43A` = DIRECT, `43I` = GDI, `43H` = PDF/Híbrido |
+| `ghostscriptPath` | string | `""` | (Modo PDF) Ruta de `gswin64c.exe`. Si se deja vacío se busca en PATH y en `C:\Program Files\gs`. Ver [Impresión PDF](#impresión-pdf) |
+| `pdfCaptureFolder` | string | `""` | (Modo PDF, **desarrollo**) Carpeta donde se guarda una copia de cada PDF renderizado para validación. Vacío = deshabilitado (no afecta producción). Ver [Validación de PDFs](#validación-de-pdfs-en-desarrollo) |
 | `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
 | `fileAction` | string | `"MOVE"` | Post-impresión: `"MOVE"` (a historyFolder) o `"DELETE"` |
 | `pollingIntervalMs` | number | `1000` | Intervalo de sondeo en ms para detectar archivos |
@@ -111,7 +113,59 @@ Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser
 |---|---|---|
 | **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `43A`. |
 | **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/POS para fuente, tamaño y negrita. El texto se renderiza formateado antes de enviarse al spooler. **Requiere impresora compatible con ESC/POS.** Equivale a `43I`. |
-| **PDF** | `"PDF"` | Renderiza el texto con word-wrap en un PDF usando **PDFKit** con mapeo a fuentes PDF estándar (Calibri/Arial → Helvetica, Courier New → Courier, etc.). El PDF se envía al driver de Windows mediante `Start-Process -Verb PrintTo`, produciendo un resultado visual similar al `DrawString` de VB.NET. Equivale a `43H`. |
+| **PDF** | `"PDF"` | Renderiza el texto con word-wrap en un PDF usando **PDFKit** con mapeo a fuentes PDF estándar (Calibri/Arial → Helvetica, Courier New → Courier, etc.). El PDF se imprime con la estrategia descrita en [Impresión PDF](#impresión-pdf), produciendo un resultado visual similar al `DrawString` de VB.NET. Equivale a `43H`. |
+
+### Modo GDI: mapeo de fuente (`f`) y tamaño (`t`) en impresoras matriciales
+
+El modo GDI traduce `f`/`t` a comandos ESC/POS reales. Para impresoras **ESC/POS matriciales de 9 pines** (Epson TM-U950) el mapeo es el siguiente:
+
+| Parámetro | Comando ESC/POS | Efecto |
+|---|---|---|
+| `f` → nombre estándar (Calibri, Arial, Times…) | `ESC M 0` (`1B 4D 00`) | Font A |
+| `f` → nombre angosto (Courier, Draft, Prestige, Condensed, OCR…) | `ESC M 1` (`1B 4D 01`) | Font B (más angosta) |
+| `t` ≤ 8 | `ESC M 1` | Font B |
+| `t` 9–11 | *(sin comando)* | tamaño normal |
+| `t` 12–14 | `ESC ! 16` (`1B 21 10`) | doble altura |
+| `t` > 14 | `ESC ! 48` (`1B 21 30`) | doble altura + doble ancho |
+
+Notas importantes:
+
+- En una TM-U950 **no existen las fuentes TrueType** (Calibri, Arial…). `fCalibri` y `fArial` caen a **Font A**; el único cambio de fuente real es entre Font A y Font B (`ESC M n`).
+- El código ya **no emite** `ESC k n` (fuentes ESC/P clásico, no soportado por ESC/POS) ni `ESC g` (15 cpi, solo 24/48 pines), que antes se ignoraban y hacían parecer que "no cambiaba la letra".
+- La negrita sigue usando `ESC E`/`ESC F` por línea y se resetea con `ESC @` al final.
+- Para tipografía TrueType real (p. ej. ver Calibri tal cual), use el modo **PDF (`43H`)** + driver de Windows, no `43I`.
+
+---
+
+## Impresión PDF
+
+> **Problema conocido:** imprimir PDF con `Start-Process -Verb PrintTo/Print` (shell de Windows) depende de la **asociación de aplicaciones para `.pdf`**, que es *por-usuario* (`HKCU`) y **no existe en el contexto de un Windows Service** (Session 0 / LocalSystem). Por eso el modo PDF fallaba con *"No hay ninguna aplicación asociada con el archivo especificado"*.
+
+El modo PDF usa esta **estrategia en cascada** (todas funcionan en Session 0):
+
+| Prioridad | Estrategia | Cómo | Cuándo |
+|---|---|---|---|
+| 1 | **Ghostscript `mswinpr2`** | `gswin64c -sDEVICE=mswinpr2 -sOutputFile="%printer%<nombre>"` — envía el PDF **a través del driver** de la impresora | Recomendado para **impresoras matriciales/GDI**. Requiere instalar Ghostscript (se detecta vía `ghostscriptPath`, PATH o `C:\Program Files\gs`) |
+| 2 | **RAW vía Winspool** | `WritePrinter` del módulo nativo (igual que el modo DIRECT), sin shell | Funciona para impresoras compatibles con **PDF/PCL directo** |
+| 3 | **Shell `PrintTo`/`Print`** | `Start-Process -Verb PrintTo` (último recurso) | Solo en entornos con verbo de impresión registrado a nivel máquina |
+
+Instalar Ghostscript para impresoras matriciales: descargar de https://ghostscript.com (instalación por defecto en `C:\Program Files\gs`) o fijar la ruta en `config.json` → `ghostscriptPath`.
+
+> **Nota para pruebas:** si la impresora configurada es **"Microsoft Print to PDF"** (puerto `PORTPROMPT`), es una impresora *virtual*: el driver pide un nombre de archivo al imprimir, y un servicio en Session 0 no puede mostrar ese diálogo (el trabajo queda colgado). Para probar el modo PDF use una impresora real o la **captura de PDF en desarrollo** (más abajo).
+
+### Validación de PDFs en desarrollo
+
+Para **ver** el PDF exacto que el servicio genera en modo `43H` (sin depender de impresoras ni puertos):
+
+1. Configurar `pdfCaptureFolder` en `config.json` (ej. `C:\Impresiones\PDF_Captura`). Vacío = deshabilitado (producción no se ve afectada).
+2. (Opcional) Instalar **Ghostscript** de https://ghostscript.com (instalación por defecto en `C:\Program Files\gs`) — habilita la ruta de impresión `mswinpr2` del modo PDF.
+3. Reiniciar el servicio y depositar un archivo con `43H` en la carpeta vigilada:
+   ```
+   Rec~43H~pImpresora~contenido del recibo.txt
+   ```
+4. El PDF capturado aparece en `pdfCaptureFolder` con nombre `AAAA-MM-DDTHH-mm-ss_<titulo>.pdf`.
+
+Cada impresión genera un archivo nuevo (nunca sobrescribe). Si `pdfCaptureFolder` está vacío o la carpeta no es escribible, la impresión continúa normalmente y solo se registra una advertencia en el log.
 
 ---
 
@@ -217,6 +271,8 @@ Después **cerrar sesión y volver a entrar** para que arranque. El vigilante ap
 | `find-node.js` / `find-node.cmd` | Localiza Node.js (system PATH o bundled portable) |
 | `alert-watcher.ps1` | Vigilante de alertas — monitorea la carpeta Alertas y muestra MessageBox (corre en sesión del usuario) |
 | `install-alert-watcher.bat` | Instala el vigilante en la carpeta Startup del usuario actual |
+| `install-virtual-printer.ps1` | **[Admin]** Crea una impresora virtual de captura (driver "Microsoft Print To PDF" + puerto local de archivo fijo). ⚠️ En la práctica el driver **ignora el puerto de archivo** y no escribe el PDF; para validar use `pdfCaptureFolder`. Ver [Validación de PDFs](#validación-de-pdfs-en-desarrollo) |
+| `uninstall-virtual-printer.ps1` | **[Admin]** Elimina la impresora virtual de captura y su puerto local |
 
 ### npm scripts (`package.json`)
 
@@ -307,7 +363,9 @@ cbs-print-service/
 │   ├── find-node.js
 │   ├── find-node.cmd
 │   ├── alert-watcher.ps1        # Vigilante de alertas (corre en sesión del usuario)
-│   └── install-alert-watcher.bat # Instala vigilante en Startup del usuario
+│   ├── install-alert-watcher.bat # Instala vigilante en Startup del usuario
+│   ├── install-virtual-printer.ps1   # [Admin] Impresora virtual de captura PDF (puerto de archivo fijo)
+│   └── uninstall-virtual-printer.ps1 # [Admin] Elimina la impresora virtual de captura
 ├── tests/                   # Tests unitarios
 │   ├── filenameParser.test.js
 │   ├── fileProcessor.test.js
@@ -389,3 +447,4 @@ CBS Print Service (Session 0)
 | 1.9.1 | Jul 2026 | Eliminado parámetro `m` (cMetodo) del parser de nombres — era legacy y no afectaba la impresión. Corrección de valores `43S`/`43N` a `43A`/`43I` en documentación. |
 | 1.9.2 | Jul 2026 | Se realizan correcciones para los parametros de tipo de letra y tamaño de letra. |
 | 2.1.0 | Jul 2026 | Nuevo modo **PDF/Híbrido** (`43H`). Renderiza el texto con fuentes reales mediante PDFKit y lo imprime a través del driver de Windows (`Start-Process -Verb PrintTo`), replicando el comportamiento del `DrawString` de VB.NET. Se agrega módulo `pdfPrinter.js` y dependencia `pdfkit`. |
+| 2.2.0 | Ago 2026 | Bump de versión a 2.2.0. |

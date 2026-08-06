@@ -8,6 +8,8 @@
 
   "printMethod":         "DIRECT",
 
+  "pdfCaptureFolder":    "C:\\Impresiones\\PDF_Captura",
+
   "printers": {
     "voucher": {
       "name":            "Recibo",

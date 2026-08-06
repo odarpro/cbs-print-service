@@ -135,7 +135,7 @@ async function printFile(opts) {
     const pdfBuffer = await pdfPrinter.renderPdfBuffer(content, {
       fontName, fontSize, bold, maxCharsPerLine
     });
-    await pdfPrinter.printPdf(pdfBuffer, resolvedName, docTitle);
+    await pdfPrinter.printPdf(pdfBuffer, resolvedName, docTitle, { copies });
     return;
   } else {
     log.debug('Modo DIRECT aplicado');

@@ -54,29 +54,28 @@ function formatLines(text, maxCharsPerLine, bold) {
   return formatted.join('\n');
 }
 
+// Mapeo para impresoras ESC/POS matriciales (TM-U950, 9 pines).
+// La TM-U950 NO soporta ESC k (fuentes ESC/P clásico) ni ESC g (15 cpi,
+// solo 24/48 pines). Sus comandos válidos son:
+//   - ESC M n  : seleccionar fuente (n=0 Font A, n=1 Font B)
+//   - ESC ! n  : modo de impresión (bit4=16 doble altura, bit5=32 doble ancho)
+//   - ESC E/F  : negrita on/off
+// "f" mapea a Font A/B según el nombre; "t" a Font B / normal / doble altura.
 function escFont(fontName) {
   if (!fontName) return '';
   const name = fontName.replace(/_/g, ' ').toLowerCase();
-  let code;
-  if (name.includes('draft')) code = 0;
-  else if (name.includes('roman') || name.includes('times')) code = 1;
-  else if (name.includes('sans') || name.includes('arial') || name.includes('helvetica') || name.includes('calibri')) code = 2;
-  else if (name.includes('courier')) code = 3;
-  else if (name.includes('prestige')) code = 4;
-  else if (name.includes('script')) code = 5;
-  else if (name.includes('ocr')) code = 6;
-  else code = 0;
-  return ESC + 'k' + String.fromCharCode(code);
+  const fontB = /courier|draft|prestige|condensed|compact|narrow|small|ocr/.test(name);
+  return ESC + 'M' + String.fromCharCode(fontB ? 1 : 0);
 }
 
 function escSize(fontSize) {
   if (fontSize === undefined || fontSize === null) return '';
   const size = parseInt(fontSize, 10);
   if (isNaN(size)) return '';
-  if (size <= 8) return '\x0F';
-  if (size <= 11) return ESC + 'g';
-  if (size <= 14) return ESC + 'M';
-  return ESC + 'P';
+  if (size <= 8)  return ESC + 'M' + '\x01';          // pequeña → Font B
+  if (size <= 11) return '';                          // normal → mantiene la fuente
+  if (size <= 14) return ESC + '!' + '\x10';          // grande → doble altura
+  return ESC + '!' + '\x30';                          // máxima → doble altura + doble ancho
 }
 
 function renderGdi(text, options = {}) {

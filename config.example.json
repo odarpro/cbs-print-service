@@ -8,6 +8,9 @@
 
   "printMethod":         "DIRECT",
 
+  "ghostscriptPath":     "",
+  "pdfCaptureFolder":    "",
+
   "printers": {
     "voucher": {
       "name":            "EPSON TM-U950",
