@@ -14,7 +14,7 @@
 ; =============================================================================
 
 #define MyAppName      "CBS Print Service"
-#define MyAppVersion   "2.2.0"
+#define MyAppVersion   "3.0.0"
 #define MyAppPublisher  "CBS"
 #define MyAppURL       ""
 #define MyExeName      "CBSPrintService.exe"
@@ -31,7 +31,6 @@ OutputDir               = .\dist
 OutputBaseFilename      = CBSPrintService_{#MyAppVersion}_Setup
 Compression             = lzma2/max
 SolidCompression        = yes
-UninstallDisplayIcon   = {app}\src\icon.ico
 PrivilegesRequired      = admin
 PrivilegesRequiredOverridesAllowed = commandline
 ArchitecturesInstallIn64BitMode    = x64compatible

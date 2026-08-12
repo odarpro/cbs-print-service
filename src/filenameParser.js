@@ -3,7 +3,7 @@
 const path = require('path');
 
 const PARAM_DEFS = [
-  { code: '43', key: 'cImpresionDirecta', desc: 'Tipo de impresión (A=Activo/Directa, I=Inactivo/GDI, H=Híbrido/PDF)', defaultValue: 'A' },
+  { code: '43', key: 'cImpresionDirecta', desc: 'Tipo de impresión (A=Activo/Directa, I=Inactivo/GDI, H=Híbrido/PDF, C=Clásica/GDI+ VB)', defaultValue: 'A' },
   { code: '44', key: 'cNotificacion',    desc: 'Notificación toast (A=Activo/Habilitado, I=Inactivo/Deshabilitado)', defaultValue: null },
   { code: 'p',  key: 'cPrinterName',      desc: 'Nombre de la impresora destino',              defaultValue: null },
   { code: 'w',  key: 'cAnchoMaximo',      desc: 'Ancho máximo de caracteres por línea',        defaultValue: '40' },
@@ -100,8 +100,8 @@ function validate(parsed) {
   }
 
   if (p['43'] !== undefined) {
-    if (!['A', 'I', 'H'].includes(p['43'].toUpperCase())) {
-      errors.push(`cImpresionDirecta (43) inválido: "${p['43']}". Debe ser A, I o H.`);
+    if (!['A', 'I', 'H', 'C'].includes(p['43'].toUpperCase())) {
+      errors.push(`cImpresionDirecta (43) inválido: "${p['43']}". Debe ser A, I, H o C.`);
     }
   }
 

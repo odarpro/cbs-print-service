@@ -55,6 +55,19 @@ describe('filenameParser.parse()', () => {
     assert.equal(result.params['43'], 'I');
   });
 
+  it('extrae parámetros con modo Clásico/GDI+ VB (43=C)', () => {
+    const result = filenameParser.parse(
+      'Rec~t9~fCourier_New~bS~pEPSON_TM-U950~w40~43C.txt'
+    );
+    assert.equal(result.prefix, 'voucher');
+    assert.equal(result.params.t, '9');
+    assert.equal(result.params.f, 'Courier_New');
+    assert.equal(result.params.b, 'S');
+    assert.equal(result.params.p, 'EPSON_TM-U950');
+    assert.equal(result.params.w, '40');
+    assert.equal(result.params['43'], 'C');
+  });
+
   it('extrae parámetro 44=A (notificación habilitada)', () => {
     const result = filenameParser.parse(
       'Rec~t9~pPrinter~w40~44A.txt'
@@ -120,6 +133,13 @@ describe('filenameParser.validate()', () => {
 
   it('acepta parámetros válidos', () => {
     const parsed = filenameParser.parse('Rec~t9~fCourier_New~bN~pPrinter~w40~43A.txt');
+    const result = filenameParser.validate(parsed);
+    assert.equal(result.valid, true);
+    assert.deepEqual(result.errors, []);
+  });
+
+  it('acepta modo Clásico/GDI+ VB (43=C)', () => {
+    const parsed = filenameParser.parse('Rec~t9~fCourier_New~bS~pPrinter~w40~43C.txt');
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, true);
     assert.deepEqual(result.errors, []);

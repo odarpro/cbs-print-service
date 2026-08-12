@@ -1,12 +1,13 @@
 # CBS Print Service
 
-Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watchFolder`, detecta archivos `Rec*.txt` / `Val*.txt` generados por Oracle Forms y los envía a impresora en tres modos:
+Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watchFolder`, detecta archivos `Rec*.txt` / `Val*.txt` generados por Oracle Forms y los envía a impresora en cuatro modos:
 
 | Modo | Código | Descripción |
 |------|--------|-------------|
 | **DIRECT** | `43A` | RAW directo al spooler vía Winspool API — sin procesos externos |
 | **GDI** | `43I` | Word-wrap + códigos ESC/POS para control de fuente/tamaño/negrita en impresoras compatibles |
 | **PDF** | `43H` | Renderiza el texto con fuente real mediante PDFKit y lo imprime a través del driver de Windows (más fiel al original VB.NET)
+| **CLASSIC** | `43C` | Replica exacta del CBSprint.exe VB: render GDI+ `DrawString` vía `PrintDocument` a través del driver de Windows |
 
 ---
 
@@ -31,7 +32,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_2.2.0_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.0.0_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -52,7 +53,7 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `logFolder` | string | `D:\Impresiones\Logs` | Carpeta de logs rotativos diarios |
 | `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
-| `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS) o `"PDF"` (renderizado PDF + driver). Por archivo: `43A` = DIRECT, `43I` = GDI, `43H` = PDF/Híbrido |
+| `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS), `"PDF"` (renderizado PDF + driver) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43H` = PDF/Híbrido, `43C` = Clásico/GDI+ VB |
 | `ghostscriptPath` | string | `""` | (Modo PDF) Ruta de `gswin64c.exe`. Si se deja vacío se busca en PATH y en `C:\Program Files\gs`. Ver [Impresión PDF](#impresión-pdf) |
 | `pdfCaptureFolder` | string | `""` | (Modo PDF, **desarrollo**) Carpeta donde se guarda una copia de cada PDF renderizado para validación. Vacío = deshabilitado (no afecta producción). Ver [Validación de PDFs](#validación-de-pdfs-en-desarrollo) |
 | `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
@@ -98,7 +99,7 @@ Rec~t9~fCourier_New~b0~pMTU-950~w40~43S.txt
 | `b` | `cBold` | `S`=Negrita, `N`=No negrita | `N` |
 | `p` | `cPrinterName` | nombre de impresora destino | — |
 | `w` | `cAnchoMaximo` | `10`–`255` | `40` |
-| `43` | `cImpresionDirecta` | `A`=Directa, `I`=GDI, `H`=Híbrido/PDF | `A` |
+| `43` | `cImpresionDirecta` | `A`=Directa, `I`=GDI, `H`=Híbrido/PDF, `C`=Clásico/GDI+ VB | `A` |
 | `44` | `cNotificacion` | `S`=Habilitada, `N`=Deshabilitada | Usa `toastEnabled` de config |
 
 Cuando un archivo incluye parámetros, estos tienen prioridad sobre `config.json`. Los nombres legacy sin `~` (ej: `Rec20260706_143022.txt`) usan solo la configuración del JSON.
@@ -114,6 +115,28 @@ Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser
 | **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `43A`. |
 | **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/POS para fuente, tamaño y negrita. El texto se renderiza formateado antes de enviarse al spooler. **Requiere impresora compatible con ESC/POS.** Equivale a `43I`. |
 | **PDF** | `"PDF"` | Renderiza el texto con word-wrap en un PDF usando **PDFKit** con mapeo a fuentes PDF estándar (Calibri/Arial → Helvetica, Courier New → Courier, etc.). El PDF se imprime con la estrategia descrita en [Impresión PDF](#impresión-pdf), produciendo un resultado visual similar al `DrawString` de VB.NET. Equivale a `43H`. |
+| **CLASSIC** | `"CLASSIC"` | Replica exacta del CBSprint.exe original: render GDI+ `DrawString` vía `PrintDocument` a través del driver de Windows (helper `scripts/print-classic.ps1`). Respeta fuentes TrueType, corte de línea duro a `maxCharsPerLine`, margen superior 3 mm y línea en blanco final, igual que `clsPrintManagement` del VB. Equivale a `43C`. |
+
+### Modo CLÁSICO (43C): réplica del CBSprint.exe VB
+
+El modo `43C` reproduce el comportamiento real del utilitario VB.NET que reemplaza este servicio. A diferencia del modo `43I` (ESC/POS) y del `43H` (PDFKit), usa el **mismo motor de dibujo del original**: GDI+ `DrawString` sobre `PrintDocument`.
+
+| Aspecto | Comportamiento (idéntico a VB) |
+|---|---|
+| Unidades | `PageUnit = Millimeter` |
+| Márgenes | superior `3` mm, izquierdo `0` |
+| Corte de línea | duro a `maxCharsPerLine` (sin word-wrap), igual que `drawLines()` |
+| Línea final | una línea en blanco (`drawBlankLine()`) |
+| Fuente | TrueType real por nombre (p. ej. `Calibri`), con `_` → espacio |
+| Envío | Driver de Windows (GDI) → spooler |
+
+> **Cómo funciona:** `classicPrinter.js` escribe el contenido a un temporal y ejecuta `powershell.exe -File scripts/print-classic.ps1` (no requiere .NET Runtime extra: usa `System.Drawing.Printing` de Windows PowerShell 5.1, presente en todas las versiones soportadas). Solo se envía el trabajo al spooler, por lo que funciona desde Session 0 (LocalSystem).
+
+Ejemplo de uso:
+```
+Rec~43C~t9~fCourier_New~bS~pEPSON_TM-U950~w40~contenido.txt
+```
+
 
 ### Modo GDI: mapeo de fuente (`f`) y tamaño (`t`) en impresoras matriciales
 
@@ -133,7 +156,7 @@ Notas importantes:
 - En una TM-U950 **no existen las fuentes TrueType** (Calibri, Arial…). `fCalibri` y `fArial` caen a **Font A**; el único cambio de fuente real es entre Font A y Font B (`ESC M n`).
 - El código ya **no emite** `ESC k n` (fuentes ESC/P clásico, no soportado por ESC/POS) ni `ESC g` (15 cpi, solo 24/48 pines), que antes se ignoraban y hacían parecer que "no cambiaba la letra".
 - La negrita sigue usando `ESC E`/`ESC F` por línea y se resetea con `ESC @` al final.
-- Para tipografía TrueType real (p. ej. ver Calibri tal cual), use el modo **PDF (`43H`)** + driver de Windows, no `43I`.
+- Para tipografía TrueType real (p. ej. ver Calibri tal cual), use el modo **PDF (`43H`)** o el modo **CLÁSICO (`43C`)** + driver de Windows, no `43I`.
 
 ---
 
@@ -271,6 +294,7 @@ Después **cerrar sesión y volver a entrar** para que arranque. El vigilante ap
 | `find-node.js` / `find-node.cmd` | Localiza Node.js (system PATH o bundled portable) |
 | `alert-watcher.ps1` | Vigilante de alertas — monitorea la carpeta Alertas y muestra MessageBox (corre en sesión del usuario) |
 | `install-alert-watcher.bat` | Instala el vigilante en la carpeta Startup del usuario actual |
+| `print-classic.ps1` | Helper del **modo CLÁSICO (43C)**: imprime con GDI+ `DrawString` (réplica del CBSprint.exe VB) vía `PrintDocument` |
 | `install-virtual-printer.ps1` | **[Admin]** Crea una impresora virtual de captura (driver "Microsoft Print To PDF" + puerto local de archivo fijo). ⚠️ En la práctica el driver **ignora el puerto de archivo** y no escribe el PDF; para validar use `pdfCaptureFolder`. Ver [Validación de PDFs](#validación-de-pdfs-en-desarrollo) |
 | `uninstall-virtual-printer.ps1` | **[Admin]** Elimina la impresora virtual de captura y su puerto local |
 
@@ -298,6 +322,7 @@ npm run test:watch   # Modo watch
 | `tests/filenameParser.test.js` | Parseo y validación de nombres de archivo con parámetros |
 | `tests/fileProcessor.test.js` | Cola FIFO, reintentos, post-procesamiento (MOVE/DELETE) |
 | `tests/gdiPrinter.test.js` | Word-wrap, formato GDI, códigos ESC/POS |
+| `tests/classicPrinter.test.js` | Modo CLÁSICO (43C): args de PowerShell, codepage, localización del helper |
 | `tests/printer.test.js` | Resolución de impresora, envío al spooler |
 | `tests/notifier.test.js` | Notificaciones toast, resolución de parámetro 44 |
 
@@ -351,6 +376,7 @@ cbs-print-service/
 │   ├── printer.js           # Envío a impresora vía Winspool API
 │   ├── gdiPrinter.js        # Renderizado modo GDI (word-wrap, ESC/POS)
 │   ├── pdfPrinter.js        # Renderizado modo PDF (PDFKit + driver Windows)
+│   ├── classicPrinter.js    # Renderizado modo CLÁSICO 43C (GDI+ VB vía print-classic.ps1)
 │   ├── logger.js            # Logging rotativo (winston)
 │   ├── filenameParser.js    # Parseo de parámetros en nombre de archivo
 │   └── notifier.js          # Escritura de archivos de alerta para el vigilante
@@ -404,7 +430,8 @@ CBS Print Service (Session 0)
   │
   │ ├── DIRECT:  printDirect() → Winspool API (RAW)
   │ ├── GDI:     renderGdi() + printDirect() → Winspool API (RAW con ESC/POS)
-  │ └── PDF:     renderPdfBuffer() → Start-Process -Verb PrintTo → driver de Windows
+  │ ├── PDF:     renderPdfBuffer() → Start-Process -Verb PrintTo → driver de Windows
+  │ └── CLASSIC: printClassic() → print-classic.ps1 → GDI+ DrawString → driver de Windows
   │
   ├──► Impresora
   │      ▼
@@ -448,3 +475,4 @@ CBS Print Service (Session 0)
 | 1.9.2 | Jul 2026 | Se realizan correcciones para los parametros de tipo de letra y tamaño de letra. |
 | 2.1.0 | Jul 2026 | Nuevo modo **PDF/Híbrido** (`43H`). Renderiza el texto con fuentes reales mediante PDFKit y lo imprime a través del driver de Windows (`Start-Process -Verb PrintTo`), replicando el comportamiento del `DrawString` de VB.NET. Se agrega módulo `pdfPrinter.js` y dependencia `pdfkit`. |
 | 2.2.0 | Ago 2026 | Bump de versión a 2.2.0. |
+| 3.0.0 | Ago 2026 | Nuevo modo **CLÁSICO** (`43C`): réplica exacta del CBSprint.exe VB mediante GDI+ `DrawString` vía `PrintDocument` (helper `scripts/print-classic.ps1`). Se agregan `classicPrinter.js`, `print-classic.ps1` y `tests/classicPrinter.test.js`. Bump de versión a 3.0.0. |

@@ -120,10 +120,32 @@ async function printFile(opts) {
   })();
 
   // 2. Aplicar modo según configuración
-  if (printMethod === 'GDI') {
+  const method = String(printMethod || 'DIRECT').toUpperCase();
+
+  if (method === 'GDI') {
     content = gdiPrint.renderGdi(content, { maxCharsPerLine, bold, fontName, fontSize });
     log.debug('Modo GDI aplicado', { maxCharsPerLine, bold, fontName, fontSize });
-  } else if (printMethod === 'PDF') {
+  } else if (method === 'CLASSIC' || method === 'C') {
+    const classicPrinter = require('./classicPrinter');
+    const { resolvedName, status } = getPrinterInfo(printerName);
+    if (!resolvedName) {
+      throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
+    }
+    if (!status.ok) {
+      throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
+    }
+    await classicPrinter.printClassic(content, {
+      printerName:    resolvedName,
+      fontName,
+      fontSize,
+      bold,
+      maxCharsPerLine,
+      fileEncoding,
+      copies,
+      docTitle,
+    });
+    return;
+  } else if (method === 'PDF') {
     const pdfPrinter = require('./pdfPrinter');
     const { resolvedName, status } = getPrinterInfo(printerName);
     if (!resolvedName) {
