@@ -5,7 +5,7 @@
 // Envía archivos de texto a impresoras matriciales.
 //
 // Método principal (nativo):
-//   Usa @thiagoelg/node-printer para invocar WritePrinter (Winspool API)
+//   Usa @tbalegas/node-printer para invocar WritePrinter (Winspool API)
 //   directamente — sin cmd.exe, powershell ni procesos externos.
 //
 // Fallback:
@@ -16,7 +16,7 @@
 // Compatibilidad: Windows 10 / Windows 11, Node.js >= 18 LTS.
 //
 // Dependencia nativa:
-//   npm install @thiagoelg/node-printer
+//   npm install @tbalegas/node-printer
 // =============================================================================
 
 const fs       = require('fs');
@@ -105,7 +105,9 @@ async function printFile(opts) {
     bold         = false,
     maxCharsPerLine = 40,
     fontName,
-    fontSize
+    fontSize,
+    gdiTimeoutMs,
+    classicTimeoutMs
   } = opts;
 
   const log = logger.get();
@@ -123,8 +125,24 @@ async function printFile(opts) {
   const method = String(printMethod || 'DIRECT').toUpperCase();
 
   if (method === 'GDI') {
-    content = gdiPrint.renderGdi(content, { maxCharsPerLine, bold, fontName, fontSize });
-    log.debug('Modo GDI aplicado', { maxCharsPerLine, bold, fontName, fontSize });
+    const { resolvedName, status } = getPrinterInfo(printerName);
+    if (!resolvedName) {
+      throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
+    }
+    if (!status.ok) {
+      throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
+    }
+    await gdiPrint.printGdi(content, {
+      printerName: resolvedName,
+      maxCharsPerLine,
+      bold,
+      fontName,
+      fontSize,
+      copies,
+      docTitle,
+      timeoutMs: gdiTimeoutMs,
+    });
+    return;
   } else if (method === 'CLASSIC' || method === 'C') {
     const classicPrinter = require('./classicPrinter');
     const { resolvedName, status } = getPrinterInfo(printerName);
@@ -143,6 +161,7 @@ async function printFile(opts) {
       fileEncoding,
       copies,
       docTitle,
+      timeoutMs: classicTimeoutMs || gdiTimeoutMs,
     });
     return;
   } else if (method === 'PDF') {
@@ -216,7 +235,7 @@ function listPrinters() {
 
 /**
  * Fallback: imprime usando PowerShell Out-Printer.
- * Se usa cuando el módulo nativo @thiagoelg/node-printer no está disponible.
+ * Se usa cuando el módulo nativo @tbalegas/node-printer no está disponible.
  */
 async function printWithPowerShell(content, printerName, encoding, copies) {
   const tmpFile = path.join(

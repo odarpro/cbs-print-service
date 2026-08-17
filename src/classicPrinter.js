@@ -91,13 +91,17 @@ function buildClassicArgs(opts) {
  * @param {number} timeoutMs
  * @returns {Promise<string>}
  */
-function runPowerShell(args, timeoutMs = 90000) {
+function runPowerShell(args, timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
-    execFile(
+    let settled = false;
+    const child = execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass'].concat(args),
-      { timeout: timeoutMs, windowsHide: true, maxBuffer: 1024 * 1024 },
+      { windowsHide: true, maxBuffer: 1024 * 1024 },
       (err, stdout, stderr) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
         if (err) {
           const detail = String(stderr || stdout || err.message).trim();
           reject(new Error(`Modo 43C (GDI+ VB): ${detail || err.message}`));
@@ -106,6 +110,17 @@ function runPowerShell(args, timeoutMs = 90000) {
         }
       }
     );
+
+    // PrintDocument puede quedar bloqueado dentro de un driver. Finalizamos el
+    // árbol completo y liberamos la cola sin depender de que PowerShell cierre.
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      if (child.pid) {
+        execFile('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+      }
+      reject(new Error(`Modo 43C (GDI+ VB): tiempo máximo de ${timeoutMs} ms excedido.`));
+    }, timeoutMs);
   });
 }
 
@@ -130,6 +145,7 @@ async function printClassic(content, opts) {
     printerName,
     docTitle = 'Recibo',
     fileEncoding = 'latin1',
+    timeoutMs = 60000,
   } = opts;
 
   const script = findPsScript();
@@ -154,7 +170,7 @@ async function printClassic(content, opts) {
       copies:    opts.copies,
     });
 
-    await runPowerShell(args);
+    await runPowerShell(args, timeoutMs);
 
     log.info('Impresión CLASSIC completada', { printerName, docTitle });
   } finally {

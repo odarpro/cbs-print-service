@@ -14,7 +14,7 @@
 ; =============================================================================
 
 #define MyAppName      "CBS Print Service"
-#define MyAppVersion   "3.0.0"
+#define MyAppVersion   "3.1.0"
 #define MyAppPublisher  "CBS"
 #define MyAppURL       ""
 #define MyExeName      "CBSPrintService.exe"
@@ -41,7 +41,7 @@ CloseApplications       = no
 RestartApplications     = no
 
 [Messages]
-WelcomeLabel2 = Este instalador lo guiará en la instalaci%C3%B3n de CBS Print Service.%n%nSe requiere Node.js 18+ instalado en el equipo.%n%nEl servicio se registrar%C3%A1 con inicio autom%C3%A1tico y se iniciar%C3%A1 al finalizar.
+WelcomeLabel2 = Este instalador lo guiará en la instalación de CBS Print Service.%n%nEl instalador incluye todo lo necesario (Node.js portable y dependencias), no requiere componentes previos en el equipo.%n%nEl servicio se registrará con inicio automático y se iniciará al finalizar.
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -85,6 +85,7 @@ Name: "{code:GetWatchFolder}\Logs";     Permissions: users-modify
 Name: "{code:GetWatchFolder}";         Permissions: users-modify
 Name: "{code:GetHistoryFolder}";       Permissions: users-modify
 Name: "{code:GetErrorFolder}";         Permissions: users-modify
+Name: "{code:GetAlertFolder}";         Permissions: users-modify
 
 ; [Run] — Eliminado intencionalmente.
 ; La post-instalación se ejecuta desde CurStepChanged(ssPostInstall)
@@ -94,6 +95,11 @@ Name: "{code:GetErrorFolder}";         Permissions: users-modify
 ; Log inicio
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Iniciando desinstalacion >> ""{app}\uninstall.log"""; \
   Flags: runhidden; RunOnceId: "UninstallLogStart"
+
+; Eliminar la tarea de alertas y detener el watcher de la sesión del usuario.
+; Debe ejecutarse antes de borrar {app}\scripts y dejar evidencia en uninstall.log.
+Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando watcher de alertas... >> ""{app}\uninstall.log"" & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\install-alert-watcher-scheduled.ps1"" -Uninstall >> ""{app}\uninstall.log"" 2>&1 & if errorlevel 1 (echo [%DATE% %TIME%] [ERROR] No se pudo eliminar el watcher de alertas. >> ""{app}\uninstall.log"") else (echo [%DATE% %TIME%] Watcher de alertas eliminado. >> ""{app}\uninstall.log"")"; \
+  Flags: runhidden; RunOnceId: "UninstallAlertWatcher"
 
 ; Detener servicio
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Deteniendo servicio... >> ""{app}\uninstall.log"" & sc stop CBSPrintService >> ""{app}\uninstall.log"" 2>&1"; \
@@ -110,9 +116,10 @@ Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Servicio eliminado. >>
 [Registry]
 ; Respaldo: ejecutar post-instalación en el próximo inicio de sesión
 ; en caso de que ShellExec en CurStepChanged falle silenciosamente.
+; Se usa el wrapper VBS para que NO aparezca ventana de cmd.
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\RunOnce"; \
   ValueType: String; ValueName: "CBSPrintService_PostInstall"; \
-  ValueData: """{app}\post-install.bat"""; \
+  ValueData: "wscript.exe ""{app}\scripts\launch-post-install.vbs"""; \
   Flags: createvalueifdoesntexist deletevalue
 
 [Icons]
@@ -172,6 +179,14 @@ begin
     Result := 'D:\Impresiones\Errores';
 end;
 
+function GetAlertFolder(Param: string): string;
+begin
+  if ConfigPage <> nil then
+    Result := ConfigPage.Values[0] + '\Alertas'
+  else
+    Result := 'D:\Impresiones\Alertas';
+end;
+
 function JsonStr(const S: string): string;
 var
   I: Integer;
@@ -208,9 +223,9 @@ var
   ResultCode: Integer;
   BatchPath: string;
 begin
-  // Ejecutar post-instalación DESPUÉS de que el usuario hace clic en Finalizar
-  // El instalador ya está cerrándose, no hay ventana que congelar
+  // Ejecutar post-instalación DESPUÉS de que el usuario hace clic en Finalizar,
+  // SIN ventana visible (SW_HIDE). El progreso queda en {app}\install.log.
   BatchPath := ExpandConstant('{app}\post-install.bat');
   if FileExists(BatchPath) then
-    Exec(BatchPath, '', '', SW_SHOW, ewNoWait, ResultCode);
+    Exec(BatchPath, '', '', SW_HIDE, ewNoWait, ResultCode);
 end;

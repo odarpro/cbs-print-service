@@ -7,7 +7,7 @@ const path = require('node:path');
 const logger = require(path.join(__dirname, '..', 'src', 'logger'));
 logger.init({ logLevel: 'error', logFolder: process.env.TEMP || '.' });
 
-const { renderGdi, wordWrap, escFont, escSize } = require(path.join(__dirname, '..', 'src', 'gdiPrinter'));
+const { printGdi, wordWrap, layoutLines, getPrinterPort, isPortPromptPort } = require(path.join(__dirname, '..', 'src', 'gdiPrinter'));
 
 describe('wordWrap', () => {
   it('envuelve línea larga sin espacios', () => {
@@ -48,106 +48,64 @@ describe('wordWrap', () => {
   });
 });
 
-describe('renderGdi', () => {
-  it('aplica word-wrap en modo GDI', () => {
-    const input = 'a'.repeat(100) + '\n' + 'b'.repeat(100);
-    const result = renderGdi(input, { maxCharsPerLine: 40, bold: false });
-    const lines = result.split('\n');
-    assert.equal(lines.length, 6);
-    assert.ok(lines.every(l => l.length <= 40));
+describe('layoutLines (líneas a dibujar en modo GDI)', () => {
+  it('convierte texto en arreglo de líneas con word-wrap', () => {
+    const input = 'a'.repeat(50);
+    const lines = layoutLines(input, 40);
+    assert.equal(lines.length, 2);
+    assert.equal(lines[0].length, 40);
+    assert.equal(lines[1].length, 10);
   });
 
-  it('incluye códigos ESC/P cuando bold=true', () => {
-    const input = 'texto';
-    const result = renderGdi(input, { maxCharsPerLine: 40, bold: true });
-    assert.ok(result.includes('\x1BE'));
-    assert.ok(result.includes('\x1BF'));
+  it('respeta saltos de línea existentes', () => {
+    assert.deepEqual(layoutLines('hola\nmundo', 40), ['hola', 'mundo']);
   });
 
-  it('no incluye códigos ESC/P cuando bold=false', () => {
-    const input = 'texto';
-    const result = renderGdi(input, { maxCharsPerLine: 40, bold: false });
-    assert.ok(!result.includes('\x1BE'));
-    assert.ok(!result.includes('\x1BF'));
-  });
-});
-
-describe('escFont (TM-U950, ESC M n → Font A/B)', () => {
-  it('mapea fuentes estándar a Font A', () => {
-    assert.equal(escFont('Calibri'), '\x1BM\x00');
-    assert.equal(escFont('Arial'), '\x1BM\x00');
-    assert.equal(escFont('Times'), '\x1BM\x00');
-    assert.equal(escFont('Sans'), '\x1BM\x00');
+  it('usa 40 como ancho por defecto', () => {
+    const input = 'x'.repeat(45);
+    assert.equal(layoutLines(input).length, 2);
   });
 
-  it('mapea fuentes angostas a Font B', () => {
-    assert.equal(escFont('Courier'), '\x1BM\x01');
-    assert.equal(escFont('Courier_New'), '\x1BM\x01');
-    assert.equal(escFont('Draft'), '\x1BM\x01');
-    assert.equal(escFont('Condensed'), '\x1BM\x01');
-    assert.equal(escFont('OCR'), '\x1BM\x01');
+  it('maneja ancho inválido o 0 sin romper', () => {
+    assert.deepEqual(layoutLines('texto de prueba', 0), ['texto de prueba']);
+    assert.deepEqual(layoutLines('texto de prueba', -5), ['texto de prueba']);
   });
 
-  it('no emite ESC k (no soportado por TM-U950)', () => {
-    assert.ok(!escFont('Calibri').includes('\x1Bk'));
-    assert.ok(!escFont('Courier').includes('\x1Bk'));
-  });
-
-  it('retorna vacío sin nombre de fuente', () => {
-    assert.equal(escFont(undefined), '');
-    assert.equal(escFont(null), '');
+  it('no deja líneas vacías por espacios finales', () => {
+    const lines = layoutLines('a b c d e f', 3);
+    assert.ok(lines.every(l => l.length > 0 && l.length <= 3));
   });
 });
 
-describe('escSize (TM-U950, sin ESC g)', () => {
-  it('t <= 8 → Font B', () => {
-    assert.equal(escSize(6), '\x1BM\x01');
-    assert.equal(escSize(8), '\x1BM\x01');
+describe('isPortPromptPort (guard anti-bloqueo PORTPROMPT)', () => {
+  it('detecta puertos PORTPROMPT', () => {
+    assert.equal(isPortPromptPort('PORTPROMPT:'), true);
+    assert.equal(isPortPromptPort('portprompt:'), true);
   });
 
-  it('t 9-11 → sin comando (normal)', () => {
-    assert.equal(escSize(9), '');
-    assert.equal(escSize(10), '');
-    assert.equal(escSize(11), '');
-  });
-
-  it('t 12-14 → doble altura (ESC ! 16)', () => {
-    assert.equal(escSize(12), '\x1B!\x10');
-    assert.equal(escSize(14), '\x1B!\x10');
-  });
-
-  it('t > 14 → doble altura + doble ancho (ESC ! 48)', () => {
-    assert.equal(escSize(15), '\x1B!\x30');
-    assert.equal(escSize(20), '\x1B!\x30');
-  });
-
-  it('no emite ESC g (solo 24/48 pines)', () => {
-    assert.ok(!escSize(10).includes('\x1Bg'));
-    assert.ok(!escSize(13).includes('\x1Bg'));
-  });
-
-  it('retorna vacío sin tamaño', () => {
-    assert.equal(escSize(undefined), '');
-    assert.equal(escSize('abc'), '');
+  it('no marca puertos normales', () => {
+    assert.equal(isPortPromptPort('LPT1:'), false);
+    assert.equal(isPortPromptPort('USB001'), false);
+    assert.equal(isPortPromptPort('C:\\Impresiones\\impresion.pdf'), false);
+    assert.equal(isPortPromptPort(null), false);
+    assert.equal(isPortPromptPort(undefined), false);
   });
 });
 
-describe('renderGdi con f/t (TM-U950)', () => {
-  it('emite ESC M n en el header y ESC @ al final', () => {
-    const result = renderGdi('hola', { fontName: 'Calibri', fontSize: 10 });
-    assert.ok(result.startsWith('\x1BM\x00'));
-    assert.ok(result.endsWith('\x1B@'));
+describe('printGdi (integración worker thread)', () => {
+  it('falla sin nombre de impresora', async () => {
+    await assert.rejects(() => printGdi('hola', {}), /nombre de la impresora/);
   });
 
-  it('nunca emite ESC k ni ESC g ni ESC P', () => {
-    const result = renderGdi('hola', { fontName: 'Courier_New', fontSize: 20 });
-    assert.ok(!result.includes('\x1Bk'));
-    assert.ok(!result.includes('\x1Bg'));
-    assert.ok(!result.includes('\x1BP'));
+  it('rechaza con impresora inexistente sin colgar (worker devuelve error)', async () => {
+    await assert.rejects(
+      () => printGdi('hola', { printerName: 'ImpresoraInexistenteXYZ987', timeoutMs: 5000 }),
+      /Modo GDI real/
+    );
   });
 
-  it('sin f/t no agrega header ni footer', () => {
-    const result = renderGdi('hola', { maxCharsPerLine: 40 });
-    assert.equal(result, 'hola');
+  it('getPrinterPort no lanza con impresora inexistente', async () => {
+    const port = await getPrinterPort('ImpresoraInexistenteXYZ987');
+    assert.equal(port, null);
   });
 });

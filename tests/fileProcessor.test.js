@@ -9,6 +9,7 @@ const logger = require(path.join(__dirname, '..', 'src', 'logger'));
 logger.init({ logLevel: 'error', logFolder: process.env.TEMP || '.' });
 
 const FileProcessor = require(path.join(__dirname, '..', 'src', 'fileProcessor'));
+const printer = require(path.join(__dirname, '..', 'src', 'printer'));
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'cbs-test-'));
 
@@ -77,5 +78,29 @@ describe('FileProcessor', () => {
   it('detecta docType correcto según prefijo', () => {
     const processor = new FileProcessor(makeConfig());
     assert.ok(processor.queueLength === 0);
+  });
+
+  it('mueve a Errores tras el primer fallo cuando retryCount es 0', async () => {
+    const cfg = makeConfig({ errorFolder: path.join(TMP_DIR, 'error-no-retry') });
+    fs.mkdirSync(cfg.errorFolder, { recursive: true });
+    const processor = new FileProcessor(cfg);
+    const testFile = path.join(TMP_DIR, 'watch', 'Rec-no-retry.txt');
+    fs.writeFileSync(testFile, 'contenido', 'latin1');
+
+    const originalPrintFile = printer.printFile;
+    let attempts = 0;
+    printer.printFile = async () => {
+      attempts++;
+      throw new Error('Fallo de prueba');
+    };
+
+    try {
+      await processor._processFile(testFile);
+    } finally {
+      printer.printFile = originalPrintFile;
+    }
+
+    assert.equal(attempts, 1);
+    assert.ok(fs.readdirSync(cfg.errorFolder).some(f => f.startsWith('Rec-no-retry')));
   });
 });

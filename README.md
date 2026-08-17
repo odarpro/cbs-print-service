@@ -32,7 +32,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_3.0.0_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.1.0_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -55,12 +55,13 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
 | `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS), `"PDF"` (renderizado PDF + driver) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43H` = PDF/Híbrido, `43C` = Clásico/GDI+ VB |
 | `ghostscriptPath` | string | `""` | (Modo PDF) Ruta de `gswin64c.exe`. Si se deja vacío se busca en PATH y en `C:\Program Files\gs`. Ver [Impresión PDF](#impresión-pdf) |
+| `gdiTimeoutMs` | number | `60000` | (Modo GDI real `43I`) Timeout del worker thread en ms. Si el driver no responde, el worker se termina y el archivo sigue la lógica de reintentos/errores |
 | `pdfCaptureFolder` | string | `""` | (Modo PDF, **desarrollo**) Carpeta donde se guarda una copia de cada PDF renderizado para validación. Vacío = deshabilitado (no afecta producción). Ver [Validación de PDFs](#validación-de-pdfs-en-desarrollo) |
 | `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
 | `fileAction` | string | `"MOVE"` | Post-impresión: `"MOVE"` (a historyFolder) o `"DELETE"` |
 | `pollingIntervalMs` | number | `1000` | Intervalo de sondeo en ms para detectar archivos |
 | `fileStabilizeMs` | number | `500` | Espera de estabilización antes de procesar el archivo |
-| `retryCount` | number | `3` | Reintentos ante fallo de impresión |
+| `retryCount` | number | `3` | Reintentos adicionales ante fallo; use `0` para mover a `Errores` tras el primer fallo |
 | `retryIntervalMs` | number | `5000` | Intervalo entre reintentos en ms |
 | `toastEnabled` | boolean | `true` | Habilitar notificaciones toast de Windows |
 | `toastOnSuccess` | boolean | `true` | Mostrar toast al imprimir exitosamente |
@@ -113,13 +114,13 @@ Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser
 | Modo | `printMethod` | Descripción |
 |---|---|---|
 | **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `43A`. |
-| **GDI** | `"GDI"` | Aplica word-wrap por `maxCharsPerLine`, códigos ESC/POS para fuente, tamaño y negrita. El texto se renderiza formateado antes de enviarse al spooler. **Requiere impresora compatible con ESC/POS.** Equivale a `43I`. |
+| **GDI** | `"GDI"` | Imprime con **GDI nativo de Windows** vía FFI (`koffi` → `gdi32.dll`): `CreateDCW("WINSPOOL")` + `CreateFontW` (fuente TrueType, tamaño en puntos, negrita) + `TextOutW` línea por línea, enviado **a través del driver** de la impresora. Sin procesos externos (Session 0-safe). Respeta `fontName`, `fontSize`, `bold` y word-wrap por `maxCharsPerLine`. Equivale a `43I`. |
 | **PDF** | `"PDF"` | Renderiza el texto con word-wrap en un PDF usando **PDFKit** con mapeo a fuentes PDF estándar (Calibri/Arial → Helvetica, Courier New → Courier, etc.). El PDF se imprime con la estrategia descrita en [Impresión PDF](#impresión-pdf), produciendo un resultado visual similar al `DrawString` de VB.NET. Equivale a `43H`. |
 | **CLASSIC** | `"CLASSIC"` | Replica exacta del CBSprint.exe original: render GDI+ `DrawString` vía `PrintDocument` a través del driver de Windows (helper `scripts/print-classic.ps1`). Respeta fuentes TrueType, corte de línea duro a `maxCharsPerLine`, margen superior 3 mm y línea en blanco final, igual que `clsPrintManagement` del VB. Equivale a `43C`. |
 
 ### Modo CLÁSICO (43C): réplica del CBSprint.exe VB
 
-El modo `43C` reproduce el comportamiento real del utilitario VB.NET que reemplaza este servicio. A diferencia del modo `43I` (ESC/POS) y del `43H` (PDFKit), usa el **mismo motor de dibujo del original**: GDI+ `DrawString` sobre `PrintDocument`.
+El modo `43C` reproduce el comportamiento real del utilitario VB.NET que reemplaza este servicio. A diferencia del modo `43I` (GDI nativo) y del `43H` (PDFKit), usa el **mismo motor de dibujo del original**: GDI+ `DrawString` sobre `PrintDocument`.
 
 | Aspecto | Comportamiento (idéntico a VB) |
 |---|---|
@@ -132,31 +133,35 @@ El modo `43C` reproduce el comportamiento real del utilitario VB.NET que reempla
 
 > **Cómo funciona:** `classicPrinter.js` escribe el contenido a un temporal y ejecuta `powershell.exe -File scripts/print-classic.ps1` (no requiere .NET Runtime extra: usa `System.Drawing.Printing` de Windows PowerShell 5.1, presente en todas las versiones soportadas). Solo se envía el trabajo al spooler, por lo que funciona desde Session 0 (LocalSystem).
 
+Si el driver queda bloqueado, `classicTimeoutMs` (predeterminado `60000`) finaliza PowerShell y su árbol de procesos. El archivo se reintenta según `retryCount` y, si no se imprime, se mueve a `errorFolder`, permitiendo que continúe la cola FIFO.
+
 Ejemplo de uso:
 ```
 Rec~43C~t9~fCourier_New~bS~pEPSON_TM-U950~w40~contenido.txt
 ```
 
 
-### Modo GDI: mapeo de fuente (`f`) y tamaño (`t`) en impresoras matriciales
+### Modo GDI (43I): GDI nativo de Windows
 
-El modo GDI traduce `f`/`t` a comandos ESC/POS reales. Para impresoras **ESC/POS matriciales de 9 pines** (Epson TM-U950) el mapeo es el siguiente:
+El modo `43I` ya no traduce a comandos ESC/POS: ahora imprime el texto con **GDI real** llamando directamente a `gdi32.dll` desde Node.js mediante la biblioteca FFI **`koffi`** (binario precompilado, no requiere compilar nada):
 
-| Parámetro | Comando ESC/POS | Efecto |
+| Paso | Llamada GDI | Efecto |
 |---|---|---|
-| `f` → nombre estándar (Calibri, Arial, Times…) | `ESC M 0` (`1B 4D 00`) | Font A |
-| `f` → nombre angosto (Courier, Draft, Prestige, Condensed, OCR…) | `ESC M 1` (`1B 4D 01`) | Font B (más angosta) |
-| `t` ≤ 8 | `ESC M 1` | Font B |
-| `t` 9–11 | *(sin comando)* | tamaño normal |
-| `t` 12–14 | `ESC ! 16` (`1B 21 10`) | doble altura |
-| `t` > 14 | `ESC ! 48` (`1B 21 30`) | doble altura + doble ancho |
+| 1 | `CreateDCW("WINSPOOL", <impresora>)` | Abre el DC de la impresora (funciona en Session 0) |
+| 2 | `CreateFontW` | Crea la fuente TrueType por nombre (`f`), tamaño en puntos (`t`) y peso negrita (`b`) |
+| 3 | `GetTextMetricsW` | Calcula la altura de línea real de la fuente |
+| 4 | `StartDocW` → `StartPage` → `TextOutW` (por línea) → `EndPage` → `EndDoc` | Dibuja el texto con word-wrap por `w` y lo envía al spooler a través del **driver** de la impresora |
 
-Notas importantes:
+Características:
 
-- En una TM-U950 **no existen las fuentes TrueType** (Calibri, Arial…). `fCalibri` y `fArial` caen a **Font A**; el único cambio de fuente real es entre Font A y Font B (`ESC M n`).
-- El código ya **no emite** `ESC k n` (fuentes ESC/P clásico, no soportado por ESC/POS) ni `ESC g` (15 cpi, solo 24/48 pines), que antes se ignoraban y hacían parecer que "no cambiaba la letra".
-- La negrita sigue usando `ESC E`/`ESC F` por línea y se resetea con `ESC @` al final.
-- Para tipografía TrueType real (p. ej. ver Calibri tal cual), use el modo **PDF (`43H`)** o el modo **CLÁSICO (`43C`)** + driver de Windows, no `43I`.
+- **Fuentes TrueType reales**: `fCalibri`, `fArial`, `fCourier_New`, etc. se usan tal cual (el `_` se convierte en espacio). Sin limitaciones de Font A/B de la impresora.
+- **Sin procesos externos**: a diferencia del modo CLÁSICO (`43C`), no invoca `powershell.exe`.
+- **Session 0-safe**: solo se envía el trabajo al spooler (igual que el modo CLÁSICO).
+- **Anti-bloqueo (worker thread + timeout)**: la secuencia GDI se ejecuta en un *worker thread* (`gdiWorker.js`), por lo que un driver colgado **nunca congela el servicio** ni la cola FIFO. Si el driver no responde en `gdiTimeoutMs` (default 60000 ms), el worker se termina y el archivo cae a la lógica normal de reintentos/errores.
+- **Guard PORTPROMPT**: las impresoras con puerto `PORTPROMPT` (p. ej. "Microsoft Print to PDF") piden nombre de archivo al imprimir; desde Session 0 eso colgaría el driver. El servicio lo detecta por registro y **falla rápido con un error claro**, sin esperar el timeout.
+- Los parámetros del nombre del archivo (`f`, `t`, `b`, `w`) tienen prioridad sobre `config.json`, como en todos los modos.
+
+> **Diferencia con CLÁSICO (`43C`):** ambos usan el driver de Windows. `43I` dibuja el texto con GDI clásico (`TextOutW`, word-wrap) directamente desde Node; `43C` replica exactamente el `DrawString` + `PrintDocument` del VB.NET (corte de línea duro, margen 3 mm, línea final en blanco) vía PowerShell.
 
 ---
 
@@ -321,7 +326,7 @@ npm run test:watch   # Modo watch
 |---|---|
 | `tests/filenameParser.test.js` | Parseo y validación de nombres de archivo con parámetros |
 | `tests/fileProcessor.test.js` | Cola FIFO, reintentos, post-procesamiento (MOVE/DELETE) |
-| `tests/gdiPrinter.test.js` | Word-wrap, formato GDI, códigos ESC/POS |
+| `tests/gdiPrinter.test.js` | Word-wrap, layout y anti-bloqueo del modo GDI real (43I): worker thread, timeout y guard PORTPROMPT |
 | `tests/classicPrinter.test.js` | Modo CLÁSICO (43C): args de PowerShell, codepage, localización del helper |
 | `tests/printer.test.js` | Resolución de impresora, envío al spooler |
 | `tests/notifier.test.js` | Notificaciones toast, resolución de parámetro 44 |
@@ -358,6 +363,7 @@ Verificar con: `status.bat` o `type C:\CBS\PrintService\healthcheck.json`.
 ## Seguridad y Auditoría
 
 - Impresión vía Winspool API (`WritePrinter`) — módulo nativo `@tbalegas/node-printer`
+- Modo GDI real (43I) vía `gdi32.dll` con FFI — dependencia `koffi` (binario precompilado)
 - Servicio corre como `LocalSystem` (configurable desde SCM)
 - Fallback PowerShell solo cuando el módulo nativo no está disponible
 - Notificaciones via archivos (sin UI directa desde el servicio)
@@ -374,7 +380,8 @@ cbs-print-service/
 │   ├── watcher.js           # Monitoreo de carpeta (chokidar)
 │   ├── fileProcessor.js     # Cola FIFO, reintentos, post-proceso
 │   ├── printer.js           # Envío a impresora vía Winspool API
-│   ├── gdiPrinter.js        # Renderizado modo GDI (word-wrap, ESC/POS)
+│   ├── gdiPrinter.js        # Modo GDI real (43I): GDI nativo vía koffi → gdi32.dll (worker + timeout + guard PORTPROMPT)
+│   ├── gdiWorker.js         # Secuencia GDI (CreateDCW/CreateFontW/TextOutW) en worker thread (anti-bloqueo)
 │   ├── pdfPrinter.js        # Renderizado modo PDF (PDFKit + driver Windows)
 │   ├── classicPrinter.js    # Renderizado modo CLÁSICO 43C (GDI+ VB vía print-classic.ps1)
 │   ├── logger.js            # Logging rotativo (winston)
@@ -429,7 +436,7 @@ watchFolder (D:\Impresiones)
 CBS Print Service (Session 0)
   │
   │ ├── DIRECT:  printDirect() → Winspool API (RAW)
-  │ ├── GDI:     renderGdi() + printDirect() → Winspool API (RAW con ESC/POS)
+  │ ├── GDI:     printGdi() → gdi32.dll (CreateDCW/CreateFontW/TextOutW) → driver de Windows
   │ ├── PDF:     renderPdfBuffer() → Start-Process -Verb PrintTo → driver de Windows
   │ └── CLASSIC: printClassic() → print-classic.ps1 → GDI+ DrawString → driver de Windows
   │
@@ -476,3 +483,4 @@ CBS Print Service (Session 0)
 | 2.1.0 | Jul 2026 | Nuevo modo **PDF/Híbrido** (`43H`). Renderiza el texto con fuentes reales mediante PDFKit y lo imprime a través del driver de Windows (`Start-Process -Verb PrintTo`), replicando el comportamiento del `DrawString` de VB.NET. Se agrega módulo `pdfPrinter.js` y dependencia `pdfkit`. |
 | 2.2.0 | Ago 2026 | Bump de versión a 2.2.0. |
 | 3.0.0 | Ago 2026 | Nuevo modo **CLÁSICO** (`43C`): réplica exacta del CBSprint.exe VB mediante GDI+ `DrawString` vía `PrintDocument` (helper `scripts/print-classic.ps1`). Se agregan `classicPrinter.js`, `print-classic.ps1` y `tests/classicPrinter.test.js`. Bump de versión a 3.0.0. |
+| 3.1.0 | Ago 2026 | El modo **GDI** (`43I`) pasa de ESC/POS a **GDI nativo de Windows**: `gdi32.dll` vía FFI (`koffi`) con `CreateDCW`/`CreateFontW`/`TextOutW` a través del driver de la impresora. Fuente TrueType real, tamaño en puntos, negrita y word-wrap. Sin procesos externos (Session 0-safe). Se agrega dependencia `koffi` y se reescribe `gdiPrinter.js`. **Anti-bloqueo**: la secuencia GDI se ejecuta en un worker thread (`gdiWorker.js`) con timeout configurable (`gdiTimeoutMs`, default 60000) y guard de puerto `PORTPROMPT` (falla rápido con error claro en vez de colgar el servicio); la cola FIFO y el vigilante nunca se congelan. |

@@ -1,6 +1,6 @@
 {
   "name": "cbs-print-service",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Servicio de impresion directa para impresoras matriciales - CBS",
   "main": "src/index.js",
   "scripts": {
@@ -13,12 +13,10 @@
   "dependencies": {
     "@tbalegas/node-printer": "1.0.2",
     "chokidar": "^3.6.0",
+    "koffi": "^3.1.4",
     "node-windows": "^1.0.0-beta.8",
     "pdfkit": "^0.19.1",
     "winston": "^3.11.0",
     "winston-daily-rotate-file": "^4.7.1"
-  },
-  "devDependencies": {
-    "canvas": "^2.11.2"
   }
 }

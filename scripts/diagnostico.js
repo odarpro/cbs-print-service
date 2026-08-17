@@ -49,7 +49,7 @@ console.log('\n[IMPRESORAS INSTALADAS]');
 
 let printerModule;
 try {
-  printerModule = require('@thiagoelg/node-printer');
+  printerModule = require('@tbalegas/node-printer');
   const printers = printerModule.getPrinters();
   if (printers.length === 0) {
     console.log('  (ninguna impresora instalada)');

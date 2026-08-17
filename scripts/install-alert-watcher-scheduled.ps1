@@ -14,22 +14,19 @@ param(
 $TaskName = 'CBSAlertWatcher'
 $TaskFolder = '\CBS Print Service'
 
-# Resolver ruta del wrapper .vbs (lanza alert-watcher.ps1 sin ventana visible)
-$VbsWrapper = Join-Path $PSScriptRoot 'launch-alert-watcher.vbs'
-$WatcherPath = Join-Path $PSScriptRoot 'alert-watcher.ps1'
-
-if (-not (Test-Path $WatcherPath)) {
-    Write-Error "No se encontró alert-watcher.ps1 en: $WatcherPath"
-    exit 1
-}
-
-if (-not (Test-Path $VbsWrapper)) {
-    Write-Error "No se encontró launch-alert-watcher.vbs en: $VbsWrapper"
-    exit 1
-}
-
 # ── Modo desinstalación ────────────────────────────────────────────────────
 if ($Uninstall) {
+    # La tarea usa un wrapper VBS que deja el watcher como proceso independiente.
+    # Detenerlo explícitamente evita que sobreviva a la eliminación de la tarea.
+    try {
+        Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
+            Where-Object { $_.CommandLine -like '*alert-watcher.ps1*' } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Write-Host "[OK] Proceso del vigilante detenido."
+    } catch {
+        Write-Host "[INFO] No se pudo comprobar el proceso del vigilante."
+    }
+
     try {
         Unregister-ScheduledTask -TaskName $TaskName -TaskPath "$TaskFolder\" -Confirm:$false -ErrorAction Stop
         Write-Host "[OK] Tarea '$TaskName' eliminada."
@@ -43,6 +40,20 @@ if ($Uninstall) {
         Write-Host "[OK] Bat legacy de Startup eliminado."
     }
     exit 0
+}
+
+# Resolver ruta del wrapper .vbs (lanza alert-watcher.ps1 sin ventana visible)
+$VbsWrapper = Join-Path $PSScriptRoot 'launch-alert-watcher.vbs'
+$WatcherPath = Join-Path $PSScriptRoot 'alert-watcher.ps1'
+
+if (-not (Test-Path $WatcherPath)) {
+    Write-Error "No se encontró alert-watcher.ps1 en: $WatcherPath"
+    exit 1
+}
+
+if (-not (Test-Path $VbsWrapper)) {
+    Write-Error "No se encontró launch-alert-watcher.vbs en: $VbsWrapper"
+    exit 1
 }
 
 # ── Eliminar tarea anterior si existe ──────────────────────────────────────
@@ -112,6 +123,15 @@ try {
     Write-Host "    Ejecuta: $wrapperExe $wrapperArgs"
     Write-Host "    La tarea se ejecuta automaticamente al registrar (si ya esta logueado)"
     Write-Host "    o en el proximo login."
+
+    # Iniciar la tarea de inmediato (si el usuario esta logueado) para que el
+    # vigilante arranque sin necesidad de cerrar sesion
+    try {
+        Start-ScheduledTask -TaskName $TaskName -TaskPath $TaskFolder -ErrorAction Stop
+        Write-Host "    Tarea iniciada de inmediato."
+    } catch {
+        Write-Host "    La tarea se iniciara en el proximo inicio de sesion."
+    }
 } catch {
     Write-Error "Error al registrar tarea: $_"
     exit 1

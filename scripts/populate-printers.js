@@ -5,7 +5,7 @@
 // Uso:
 //   node scripts/populate-printers.js
 //
-// Intenta cargar el módulo nativo @thiagoelg/node-printer. Si no está
+// Intenta cargar el módulo nativo @tbalegas/node-printer. Si no está
 // disponible no realiza cambios (evita fallos en entornos no-Windows).
 // =============================================================================
 
@@ -32,9 +32,9 @@ if (!fs.existsSync(CONFIG_PATH)) {
 
 let printerModule;
 try {
-  printerModule = require('@thiagoelg/node-printer');
+  printerModule = require('@tbalegas/node-printer');
 } catch (e) {
-  console.log('Módulo nativo @thiagoelg/node-printer no disponible en este entorno. No se modificará config.json.');
+  console.log('Módulo nativo @tbalegas/node-printer no disponible en este entorno. No se modificará config.json.');
   process.exit(0);
 }
 

@@ -297,11 +297,18 @@ class FileProcessor {
     });
 
     // 6. Intentar imprimir con reintentos
-    const maxRetries = cfg.retryCount    || 3;
-    const retryMs    = cfg.retryIntervalMs || 5000;
+    // retryCount indica reintentos adicionales: 0 intenta una vez y, si falla,
+    // mueve el archivo a Errores para que no mantenga detenida la cola.
+    const retryCount = Number.isInteger(cfg.retryCount) && cfg.retryCount >= 0
+      ? cfg.retryCount
+      : 3;
+    const maxAttempts = retryCount + 1;
+    const retryMs = Number.isFinite(cfg.retryIntervalMs) && cfg.retryIntervalMs >= 0
+      ? cfg.retryIntervalMs
+      : 5000;
     let   lastError  = null;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         await printer.printFile({
           filePath:       contentFilePath,
@@ -314,7 +321,9 @@ class FileProcessor {
           bold:           resolvedBold,
           maxCharsPerLine: resolvedMaxChars,
           fontName:       resolvedFontName,
-          fontSize:       resolvedFontSize
+          fontSize:       resolvedFontSize,
+          gdiTimeoutMs:   cfg.gdiTimeoutMs,
+          classicTimeoutMs: cfg.classicTimeoutMs
         });
 
         // ── Éxito ──────────────────────────────────────────────────────
@@ -335,12 +344,12 @@ class FileProcessor {
 
       } catch (err) {
         lastError = err;
-        log.warn(`Intento ${attempt}/${maxRetries} fallido`, {
+        log.warn(`Intento ${attempt}/${maxAttempts} fallido`, {
           fileName,
           error: err.message
         });
 
-        if (attempt < maxRetries) {
+        if (attempt < maxAttempts) {
           await sleep(retryMs);
         }
       }
@@ -350,7 +359,7 @@ class FileProcessor {
     log.error('Archivo no pudo imprimirse tras todos los reintentos', {
       fileName,
       error: lastError ? lastError.message : 'desconocido',
-      maxRetries
+      retryCount
     });
 
     const parsedParams = parsed && parsed.params ? parsed.params : null;

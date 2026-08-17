@@ -8,6 +8,9 @@
 
   "printMethod":         "DIRECT",
 
+  "gdiTimeoutMs":        60000,
+  "classicTimeoutMs":    60000,
+
   "ghostscriptPath":     "",
   "pdfCaptureFolder":    "",
 

@@ -1,12 +1,37 @@
 'use strict';
+// =============================================================================
+// gdiPrinter.js  –  CBS Print Service  (modo 43I / GDI real)
+//
+// Imprime texto con GDI nativo de Windows (gdi32.dll vía FFI koffi), a través
+// del driver de la impresora, respetando los parámetros del nombre del archivo:
+//   f = fuente, t = tamaño, b = negrita, w = ancho máximo por línea.
+//
+// La secuencia GDI se ejecuta en un WORKER THREAD (src/gdiWorker.js) para que
+// un driver que se cuelgue NUNCA bloquee el hilo principal ni la cola FIFO:
+//   - timeout configurable (gdiTimeoutMs, default 60 s): si se excede, el
+//     worker se termina y el archivo cae a la lógica normal de reintentos.
+//   - guard de puerto PORTPROMPT (impresoras "Microsoft Print to PDF"): desde
+//     un servicio Session 0 el driver pide nombre de archivo y colgaría; se
+//     detecta por registro y se falla rápido con un error claro.
+//
+// Session 0-safe: solo se envía el trabajo al spooler vía el driver.
+// =============================================================================
 
-const logger = require('./logger');
+const fs       = require('fs');
+const path     = require('path');
+const { execFile } = require('child_process');
+const { Worker }  = require('worker_threads');
+const logger   = require('./logger');
 
-const ESC = '\x1B';
+const WORKER_SCRIPT  = path.join(__dirname, 'gdiWorker.js');
+const DEFAULT_TIMEOUT_MS = 60000;
 
-function escBoldOn()  { return ESC + 'E'; }
-function escBoldOff() { return ESC + 'F'; }
-
+/**
+ * Renderiza el texto aplicando word-wrap a maxChars por línea (lógica pura).
+ * @param {string} text
+ * @param {number} maxChars
+ * @returns {string}
+ */
 function wordWrap(text, maxChars) {
   if (!maxChars || maxChars <= 0) return text;
 
@@ -37,70 +62,173 @@ function wordWrap(text, maxChars) {
   return result.join('\n');
 }
 
-function applyBold(text, bold) {
-  if (!bold) return text;
-  return escBoldOn() + text + escBoldOff();
+/**
+ * Convierte el contenido en el arreglo de líneas a dibujar (word-wrap).
+ * @param {string} text
+ * @param {number} maxCharsPerLine
+ * @returns {string[]}
+ */
+function layoutLines(text, maxCharsPerLine) {
+  const max = maxCharsPerLine && maxCharsPerLine > 0 ? maxCharsPerLine : 40;
+  return wordWrap(text, max).split('\n');
 }
 
-function formatLines(text, maxCharsPerLine, bold) {
-  const wrapped = wordWrap(text, maxCharsPerLine);
-  const lines = wrapped.split('\n');
-
-  const formatted = lines.map(line => {
-    const padded = line.padEnd(Math.min(line.length, maxCharsPerLine || 80));
-    return applyBold(padded, bold);
+/**
+ * Consulta el puerto de la impresora en el registro de Windows.
+ * @param {string} printerName  Nombre REAL de la impresora
+ * @returns {Promise<string|null>}  'PORTPROMPT:', 'LPT1:', 'USB001', etc., o null si no se pudo determinar
+ */
+function getPrinterPort(printerName) {
+  return new Promise(resolve => {
+    const key = `HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Printers\\${printerName}`;
+    execFile('reg.exe', ['query', key, '/v', 'Port'], { windowsHide: true, timeout: 10000 }, (err, stdout) => {
+      if (err) return resolve(null);
+      const m = /Port\s+REG_(?:S|M)Z\s+(\S+)/i.exec(stdout || '');
+      resolve(m ? m[1] : null);
+    });
   });
-
-  return formatted.join('\n');
 }
 
-// Mapeo para impresoras ESC/POS matriciales (TM-U950, 9 pines).
-// La TM-U950 NO soporta ESC k (fuentes ESC/P clásico) ni ESC g (15 cpi,
-// solo 24/48 pines). Sus comandos válidos son:
-//   - ESC M n  : seleccionar fuente (n=0 Font A, n=1 Font B)
-//   - ESC ! n  : modo de impresión (bit4=16 doble altura, bit5=32 doble ancho)
-//   - ESC E/F  : negrita on/off
-// "f" mapea a Font A/B según el nombre; "t" a Font B / normal / doble altura.
-function escFont(fontName) {
-  if (!fontName) return '';
-  const name = fontName.replace(/_/g, ' ').toLowerCase();
-  const fontB = /courier|draft|prestige|condensed|compact|narrow|small|ocr/.test(name);
-  return ESC + 'M' + String.fromCharCode(fontB ? 1 : 0);
+/**
+ * Verifica si un puerto de impresora es PORTPROMPT (pide nombre de archivo
+ * al imprimir → colgaría desde un servicio Session 0).
+ * @param {string|null} port
+ * @returns {boolean}
+ */
+function isPortPromptPort(port) {
+  return !!port && port.toUpperCase().startsWith('PORTPROMPT');
 }
 
-function escSize(fontSize) {
-  if (fontSize === undefined || fontSize === null) return '';
-  const size = parseInt(fontSize, 10);
-  if (isNaN(size)) return '';
-  if (size <= 8)  return ESC + 'M' + '\x01';          // pequeña → Font B
-  if (size <= 11) return '';                          // normal → mantiene la fuente
-  if (size <= 14) return ESC + '!' + '\x10';          // grande → doble altura
-  return ESC + '!' + '\x30';                          // máxima → doble altura + doble ancho
+/**
+ * Ejecuta la secuencia GDI en un worker thread con timeout.
+ * Si el worker se cuelga, se termina y se rechaza (la cola nunca se bloquea).
+ *
+ * @param {object} job  workerData para gdiWorker.js
+ * @param {number} timeoutMs
+ * @returns {Promise<void>}
+ */
+function runGdiInWorker(job, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(WORKER_SCRIPT)) {
+      return reject(new Error(`Modo GDI real: no se encontró ${WORKER_SCRIPT}.`));
+    }
+
+    const worker = new Worker(WORKER_SCRIPT, { workerData: job });
+    let done = false;
+
+    const finish = (cb, value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      cb(value);
+    };
+
+    const timer = setTimeout(() => {
+      finish(reject, new Error(
+        `Modo GDI real: timeout de ${timeoutMs} ms esperando a la impresora "${job.printerName}" (driver colgado o sin respuesta).`
+      ));
+      worker.terminate().catch(() => {});
+    }, timeoutMs);
+
+    worker.on('message', msg => {
+      if (msg && msg.ok) {
+        finish(resolve, msg);
+      } else {
+        finish(reject, new Error((msg && msg.error) || 'Modo GDI real: error desconocido en el worker.'));
+      }
+    });
+
+    worker.on('error', err => {
+      finish(reject, new Error(`Modo GDI real: error en el worker: ${err.message}`));
+    });
+
+    worker.on('exit', code => {
+      if (!done && code !== 0) {
+        finish(reject, new Error(`Modo GDI real: el worker terminó inesperadamente (código ${code}).`));
+      }
+    });
+  });
 }
 
-function renderGdi(text, options = {}) {
+/**
+ * Imprime contenido de texto con GDI real respetando los parámetros del
+ * nombre del archivo (f=fuente, t=tamaño, b=bold, w=ancho por línea).
+ *
+ * @param {string} content  Contenido ya decodificado (fileEncoding)
+ * @param {object} [opts]
+ *   opts.printerName       {string}  Nombre REAL de la impresora (resuelto)
+ *   opts.maxCharsPerLine   {number}  Ancho máximo por línea (w)
+ *   opts.bold              {boolean} Negrita (b)
+ *   opts.fontName          {string}  Nombre de fuente (f), `_` → espacio
+ *   opts.fontSize          {number}  Tamaño en puntos (t)
+ *   opts.copies            {number}  Copias
+ *   opts.docTitle          {string}  Título del trabajo
+ *   opts.timeoutMs         {number}  Timeout GDI (default 60000)
+ * @returns {Promise<void>}
+ */
+async function printGdi(content, opts = {}) {
   const {
+    printerName,
     maxCharsPerLine = 40,
     bold = false,
-    fontName,
-    fontSize
-  } = options;
+    fontName = 'Courier New',
+    fontSize = 9,
+    copies = 1,
+    docTitle = 'Recibo',
+    timeoutMs = DEFAULT_TIMEOUT_MS
+  } = opts;
 
-  const log = logger.get();
-  log.debug('Renderizando texto en modo GDI', {
-    charCount: text.length,
+  if (!printerName) {
+    throw new Error('Modo GDI real: falta el nombre de la impresora.');
+  }
+
+  const cleanFont = String(fontName || 'Courier New').replace(/_/g, ' ') || 'Courier New';
+  const parsedSize = parseInt(fontSize, 10);
+  const safeSize = isNaN(parsedSize) || parsedSize < 1 || parsedSize > 72 ? 9 : parsedSize;
+  const nCopies = copies && copies > 0 ? copies : 1;
+  const nTimeout = timeoutMs && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS;
+  const lines = layoutLines(content, maxCharsPerLine);
+
+  // Guard anti-bloqueo: puertos PORTPROMPT (Microsoft Print to PDF) piden
+  // nombre de archivo al imprimir y desde Session 0 colgarían el driver.
+  const port = await getPrinterPort(printerName);
+  if (isPortPromptPort(port)) {
+    throw new Error(
+      `Modo GDI real: la impresora "${printerName}" usa puerto PORTPROMPT ` +
+      `(pide nombre de archivo al imprimir). Desde un servicio Session 0 se colgaría; ` +
+      `use una impresora con puerto real (LPT, USB, red) u otro modo de impresión.`
+    );
+  }
+
+  logger.get().debug('Iniciando impresión modo GDI real', {
+    printerName,
+    fontName: cleanFont,
+    fontSize: safeSize,
+    bold: !!bold,
     maxCharsPerLine,
-    bold,
-    fontName,
-    fontSize
+    copies: nCopies,
+    timeoutMs: nTimeout,
+    port: port || 'desconocido',
+    lineas: lines.length
   });
 
-  const hasFontSettings = fontName !== undefined || fontSize !== undefined;
-  const header = hasFontSettings ? escFont(fontName) + escSize(fontSize) : '';
-  const footer = hasFontSettings ? ESC + '@' : '';
-  const body = formatLines(text, maxCharsPerLine, bold);
+  await runGdiInWorker({
+    printerName,
+    lines,
+    fontName: cleanFont,
+    fontSize: safeSize,
+    bold: !!bold,
+    copies: nCopies,
+    docTitle
+  }, nTimeout);
 
-  return header + body + footer;
+  logger.get().info('Impresión GDI real completada', {
+    printerName,
+    fontName: cleanFont,
+    fontSize: safeSize,
+    bold: !!bold,
+    copies: nCopies
+  });
 }
 
-module.exports = { renderGdi, wordWrap, formatLines, escFont, escSize };
+module.exports = { printGdi, wordWrap, layoutLines, getPrinterPort, isPortPromptPort, runGdiInWorker };

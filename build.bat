@@ -6,7 +6,7 @@ title CBS Print Service - Build
 cd /d "%~dp0"
 
 echo ============================================================
-echo  CBS Print Service  v3.0.0  -  Build
+echo  CBS Print Service  v3.1.0  -  Build
 echo ============================================================
 echo.
 
@@ -201,7 +201,7 @@ echo ============================================================
 echo.
 dir /B dist\*.exe 2>nul
 echo.
-echo Instalador: dist\CBSPrintService_3.0.0_Setup.exe
+echo Instalador: dist\CBSPrintService_3.1.0_Setup.exe
 echo.
 echo Para distribuir, copie a las maquinas destino y ejecute:
 echo   setup.exe /VERYSILENT

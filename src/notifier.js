@@ -11,6 +11,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 const logger = require('./logger');
 
 let _config = null;
@@ -69,6 +70,22 @@ function shouldNotifyError(parsedParams) {
 }
 
 /**
+ * Garantiza que la carpeta de alertas sea modificable por el grupo Users,
+ * para que el vigilante (que corre en la sesión del usuario) pueda
+ * leer y borrar los archivos de alerta.
+ * @param {string} dir
+ */
+function _ensureUsersModify(dir) {
+  try {
+    if (process.platform !== 'win32') return;
+    // S-1-5-32-545 = grupo "Users" local (independiente del idioma)
+    execFile('icacls.exe', [dir, '/grant', '*S-1-5-32-545:(OI)(CI)M'], { windowsHide: true }, () => {});
+  } catch {
+    // No romper el servicio por un error de ACL
+  }
+}
+
+/**
  * Escribe un archivo de alerta que el vigilante mostrará como MessageBox.
  * @param {string} title   Título de la alerta
  * @param {string} message Mensaje de la alerta
@@ -79,6 +96,7 @@ function _writeAlert(title, message, level) {
     const alertDir = _getAlertDir();
     if (!fs.existsSync(alertDir)) {
       fs.mkdirSync(alertDir, { recursive: true });
+      _ensureUsersModify(alertDir);
     }
 
     const iconMap = { error: '[ERROR]', warn: '[AVISO]', info: '[INFO]' };

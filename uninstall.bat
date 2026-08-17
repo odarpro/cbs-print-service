@@ -76,10 +76,16 @@ if exist "%INSTALL_DIR%\scripts\uninstall-service.js" (
 
 :: ── 1b) Eliminar tarea programada del vigilante de alertas ─────────────────
 echo [1b] Eliminando tarea programada del vigilante de alertas...
+echo [%DATE% %TIME%] Eliminando watcher de alertas... >> "%UNINSTALL_LOG%"
 if exist "%INSTALL_DIR%\scripts\install-alert-watcher-scheduled.ps1" (
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\scripts\install-alert-watcher-scheduled.ps1" -Uninstall >> "%UNINSTALL_LOG%" 2>&1
 ) else (
     powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Unregister-ScheduledTask -TaskName 'CBSAlertWatcher' -TaskPath '\CBS Print Service\' -Confirm:`$false -ErrorAction SilentlyContinue" >> "%UNINSTALL_LOG%" 2>&1
+)
+if %errorLevel% neq 0 (
+    echo [%DATE% %TIME%] [ERROR] No se pudo eliminar el watcher de alertas. >> "%UNINSTALL_LOG%"
+) else (
+    echo [%DATE% %TIME%] Watcher de alertas eliminado. >> "%UNINSTALL_LOG%"
 )
 :: También eliminar bat legacy de Startup si existe
 if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CBSAlertWatcher.bat" (

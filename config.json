@@ -8,21 +8,24 @@
 
   "printMethod":         "DIRECT",
 
+  "gdiTimeoutMs":        5000,
+  "classicTimeoutMs":    5000,
+
   "pdfCaptureFolder":    "C:\\Impresiones\\PDF_Captura",
 
   "printers": {
     "voucher": {
-      "name":            "Recibo",
-      "fontName":        "Calibri",
-      "fontSize":        10,
+      "name":            "CapturaPDF",
+      "fontName":        "Courier New",
+      "fontSize":        9,
       "bold":            false,
       "maxCharsPerLine": 40,
       "copies":          1
     },
     "slip": {
-      "name":            "Cheques",
-      "fontName":        "Calibri",
-      "fontSize":        10,
+      "name":            "CapturaPDF",
+      "fontName":        "Courier New",
+      "fontSize":        9,
       "bold":            false,
       "maxCharsPerLine": 40,
       "copies":          1
