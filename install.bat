@@ -89,6 +89,8 @@ echo xcopy src to %INSTALL_DIR%\src >> "%INSTALL_LOG%"
 xcopy /E /I /Y "%SOURCE_DIR%src"          "%INSTALL_DIR%\src"        >> "%INSTALL_LOG%" 2>&1
 echo xcopy scripts to %INSTALL_DIR%\scripts >> "%INSTALL_LOG%"
 xcopy /E /I /Y "%SOURCE_DIR%scripts"      "%INSTALL_DIR%\scripts"    >> "%INSTALL_LOG%" 2>&1
+echo xcopy java to %INSTALL_DIR%\java >> "%INSTALL_LOG%"
+xcopy /E /I /Y "%SOURCE_DIR%java"          "%INSTALL_DIR%\java"       >> "%INSTALL_LOG%" 2>&1
 echo copy package.json to %INSTALL_DIR% >> "%INSTALL_LOG%"
 copy  /Y        "%SOURCE_DIR%package.json" "%INSTALL_DIR%"           >> "%INSTALL_LOG%" 2>&1
 

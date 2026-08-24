@@ -3,7 +3,7 @@
 // notifier.js  –  CBS Print Service
 //
 // Escribe archivos de alerta en la carpeta Alertas.
-// El vigilante de alertas (alert-watcher.ps1) corre en la sesión del usuario
+// El vigilante de alertas Java corre en la sesión del usuario
 // y muestra un MessageBox por cada archivo nuevo.
 //
 // Controlado por configuración global (config.json) y parámetro 44 por archivo.

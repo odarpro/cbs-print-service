@@ -260,7 +260,6 @@ class FileProcessor {
     if (rawMethod43) {
       const upper = rawMethod43.toUpperCase();
       if (upper === 'I') resolvedPrintMethod = 'GDI';
-      else if (upper === 'H') resolvedPrintMethod = 'PDF';
       else if (upper === 'C') resolvedPrintMethod = 'CLASSIC';
       else resolvedPrintMethod = 'DIRECT';
     } else if (hasGdiParams) {

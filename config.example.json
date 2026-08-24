@@ -11,9 +11,6 @@
   "gdiTimeoutMs":        60000,
   "classicTimeoutMs":    60000,
 
-  "ghostscriptPath":     "",
-  "pdfCaptureFolder":    "",
-
   "printers": {
     "voucher": {
       "name":            "EPSON TM-U950",

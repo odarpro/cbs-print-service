@@ -10,7 +10,7 @@
 // un driver que se cuelgue NUNCA bloquee el hilo principal ni la cola FIFO:
 //   - timeout configurable (gdiTimeoutMs, default 60 s): si se excede, el
 //     worker se termina y el archivo cae a la lógica normal de reintentos.
-//   - guard de puerto PORTPROMPT (impresoras "Microsoft Print to PDF"): desde
+  //   - guard de puerto PORTPROMPT (impresoras virtuales interactivas): desde
 //     un servicio Session 0 el driver pide nombre de archivo y colgaría; se
 //     detecta por registro y se falla rápido con un error claro.
 //
@@ -189,7 +189,7 @@ async function printGdi(content, opts = {}) {
   const nTimeout = timeoutMs && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS;
   const lines = layoutLines(content, maxCharsPerLine);
 
-  // Guard anti-bloqueo: puertos PORTPROMPT (Microsoft Print to PDF) piden
+  // Guard anti-bloqueo: puertos PORTPROMPT de impresoras virtuales piden
   // nombre de archivo al imprimir y desde Session 0 colgarían el driver.
   const port = await getPrinterPort(printerName);
   if (isPortPromptPort(port)) {

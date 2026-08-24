@@ -10,6 +10,7 @@ El `build.bat` detecta e instala automáticamente lo que falte:
 | Python 3.12 | ✅ Automática | ~30 MB |
 | VS 2022 Build Tools | ✅ Con confirmación | ~2 GB |
 | Inno Setup 6+ | ✅ Automática | ~3 MB |
+| JDK 17+ | ❌ Manual | Compila el vigilante de alertas Java |
 
 Solo necesitas **Windows 10/11 64 bits** y conexión a internet.
 
@@ -27,8 +28,9 @@ El script:
 3. Pregunta si instalar VS Build Tools (necesario para módulo nativo)
 4. Instala Inno Setup si no existe
 5. Ejecuta `npm install`
-6. Ejecuta `npm test`
-7. Genera `dist\CBSPrintService_3.1.0_Setup.exe`
+6. Compila el vigilante Java con JDK 17+
+7. Ejecuta `npm test`
+8. Genera `dist\CBSPrintService_3.1.0_Setup.exe`
 
 ## Instalación silenciosa (SCCM / GPO)
 
@@ -63,6 +65,7 @@ CBSPrintService_3.1.0_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="%TEMP%\cbs_i
 ## Notas
 
 - El instalador incluye `node_modules` pre-compilados. Se debe ejecutar `build.bat` solo en la máquina de build.
+- Los equipos destino requieren Java 17+ para ejecutar el vigilante de alertas.
 - `config.json` se crea con valores por defecto si no existe en el destino.
 - Las rutas de carpetas se configuran durante la instalación (o se editan en `config.json` después).
 - Si no instalas VS Build Tools, el módulo nativo `@tbalegas/node-printer` no se compilará. El instalador funcionará pero la impresión fallará hasta que se compile en cada máquina destino con `npm install`.

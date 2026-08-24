@@ -32,6 +32,7 @@ timeout /t 3 /nobreak >nul
 echo [2/5] Actualizando archivos (config.json NO sera modificado)...
 xcopy /E /I /Y "%SOURCE_DIR%src"     "%INSTALL_DIR%\src\"     >nul
 xcopy /E /I /Y "%SOURCE_DIR%scripts" "%INSTALL_DIR%\scripts\" >nul
+xcopy /E /I /Y "%SOURCE_DIR%java"    "%INSTALL_DIR%\java\"    >nul
 copy /Y "%SOURCE_DIR%package.json"   "%INSTALL_DIR%\"         >nul
 echo        Archivos actualizados.  [OK]
 
@@ -57,7 +58,15 @@ if %errorLevel% equ 0 (
     echo        npm no disponible. Las dependencias deben estar pre-instaladas.
 )
 
-echo [5/5] Reiniciando servicio...
+echo [5/6] Instalando vigilante Java de alertas...
+call scripts\install-alert-watcher.bat > "%TEMP%\cbs_alert_watcher_update.log" 2>&1
+if %errorLevel% neq 0 (
+    echo [WARN] No se pudo instalar el vigilante Java. Revise %TEMP%\cbs_alert_watcher_update.log
+) else (
+    echo        Vigilante Java instalado.  [OK]
+)
+
+echo [6/6] Reiniciando servicio...
 sc start CBSPrintService >nul 2>&1
 if %errorLevel% equ 0 (
     echo        Servicio reiniciado.  [OK]

@@ -11,11 +11,9 @@
   "gdiTimeoutMs":        5000,
   "classicTimeoutMs":    5000,
 
-  "pdfCaptureFolder":    "C:\\Impresiones\\PDF_Captura",
-
   "printers": {
     "voucher": {
-      "name":            "CapturaPDF",
+      "name":            "EPSON TM-U950",
       "fontName":        "Courier New",
       "fontSize":        9,
       "bold":            false,
@@ -23,7 +21,7 @@
       "copies":          1
     },
     "slip": {
-      "name":            "CapturaPDF",
+      "name":            "EPSON TM-U950",
       "fontName":        "Courier New",
       "fontSize":        9,
       "bold":            false,

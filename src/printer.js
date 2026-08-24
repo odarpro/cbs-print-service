@@ -164,20 +164,6 @@ async function printFile(opts) {
       timeoutMs: classicTimeoutMs || gdiTimeoutMs,
     });
     return;
-  } else if (method === 'PDF') {
-    const pdfPrinter = require('./pdfPrinter');
-    const { resolvedName, status } = getPrinterInfo(printerName);
-    if (!resolvedName) {
-      throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
-    }
-    if (!status.ok) {
-      throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
-    }
-    const pdfBuffer = await pdfPrinter.renderPdfBuffer(content, {
-      fontName, fontSize, bold, maxCharsPerLine
-    });
-    await pdfPrinter.printPdf(pdfBuffer, resolvedName, docTitle, { copies });
-    return;
   } else {
     log.debug('Modo DIRECT aplicado');
   }

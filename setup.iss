@@ -56,6 +56,9 @@ Source: "bin\*";                       DestDir: "{app}\bin";          Flags: ign
 ; Scripts
 Source: "scripts\*";                   DestDir: "{app}\scripts";      Flags: ignoreversion recursesubdirs createallsubdirs
 
+; Código Java del vigilante de alertas
+Source: "java\*";                      DestDir: "{app}\java";         Flags: ignoreversion recursesubdirs createallsubdirs
+
 ; Tests
 Source: "tests\*";                     DestDir: "{app}\tests";        Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -96,9 +99,9 @@ Name: "{code:GetAlertFolder}";         Permissions: users-modify
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Iniciando desinstalacion >> ""{app}\uninstall.log"""; \
   Flags: runhidden; RunOnceId: "UninstallLogStart"
 
-; Eliminar la tarea de alertas y detener el watcher de la sesión del usuario.
+; Eliminar la tarea de alertas y detener el watcher Java de la sesión del usuario.
 ; Debe ejecutarse antes de borrar {app}\scripts y dejar evidencia en uninstall.log.
-Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando watcher de alertas... >> ""{app}\uninstall.log"" & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\install-alert-watcher-scheduled.ps1"" -Uninstall >> ""{app}\uninstall.log"" 2>&1 & if errorlevel 1 (echo [%DATE% %TIME%] [ERROR] No se pudo eliminar el watcher de alertas. >> ""{app}\uninstall.log"") else (echo [%DATE% %TIME%] Watcher de alertas eliminado. >> ""{app}\uninstall.log"")"; \
+Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando watcher de alertas... >> ""{app}\uninstall.log"" & schtasks.exe /End /TN ""\CBS Print Service\CBSAlertWatcher"" >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSAlertWatcher"" /F >> ""{app}\uninstall.log"" 2>&1"; \
   Flags: runhidden; RunOnceId: "UninstallAlertWatcher"
 
 ; Detener servicio

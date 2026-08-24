@@ -173,8 +173,8 @@ describe('filenameParser.validate()', () => {
     assert.ok(result.errors[0].includes('cBold'));
   });
 
-  it('rechaza cImpresionDirecta (43) inválido', () => {
-    const parsed = filenameParser.parse('Rec~43X.txt');
+  it('rechaza 43=H', () => {
+    const parsed = filenameParser.parse('Rec~43H.txt');
     const result = filenameParser.validate(parsed);
     assert.equal(result.valid, false);
     assert.ok(result.errors[0].includes('cImpresionDirecta'));

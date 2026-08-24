@@ -6,7 +6,6 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 |------|--------|-------------|
 | **DIRECT** | `43A` | RAW directo al spooler vía Winspool API — sin procesos externos |
 | **GDI** | `43I` | Word-wrap + códigos ESC/POS para control de fuente/tamaño/negrita en impresoras compatibles |
-| **PDF** | `43H` | Renderiza el texto con fuente real mediante PDFKit y lo imprime a través del driver de Windows (más fiel al original VB.NET)
 | **CLASSIC** | `43C` | Replica exacta del CBSprint.exe VB: render GDI+ `DrawString` vía `PrintDocument` a través del driver de Windows |
 
 ---
@@ -18,6 +17,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 | Windows | 10 / 11 (64 bits) |
 | Node.js | 18 LTS o superior |
 | npm | incluido con Node.js |
+| Java | JRE 17 o superior en `PATH` o `JAVA_HOME` (para las alertas visuales) |
 | Impresora | Driver instalado (USB, LPT, red) |
 
 ---
@@ -53,10 +53,8 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `logFolder` | string | `D:\Impresiones\Logs` | Carpeta de logs rotativos diarios |
 | `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
-| `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS), `"PDF"` (renderizado PDF + driver) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43H` = PDF/Híbrido, `43C` = Clásico/GDI+ VB |
-| `ghostscriptPath` | string | `""` | (Modo PDF) Ruta de `gswin64c.exe`. Si se deja vacío se busca en PATH y en `C:\Program Files\gs`. Ver [Impresión PDF](#impresión-pdf) |
+| `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43C` = Clásico/GDI+ VB |
 | `gdiTimeoutMs` | number | `60000` | (Modo GDI real `43I`) Timeout del worker thread en ms. Si el driver no responde, el worker se termina y el archivo sigue la lógica de reintentos/errores |
-| `pdfCaptureFolder` | string | `""` | (Modo PDF, **desarrollo**) Carpeta donde se guarda una copia de cada PDF renderizado para validación. Vacío = deshabilitado (no afecta producción). Ver [Validación de PDFs](#validación-de-pdfs-en-desarrollo) |
 | `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
 | `fileAction` | string | `"MOVE"` | Post-impresión: `"MOVE"` (a historyFolder) o `"DELETE"` |
 | `pollingIntervalMs` | number | `1000` | Intervalo de sondeo en ms para detectar archivos |
@@ -77,10 +75,10 @@ printers.slip     → para archivos Val*.txt
 | Sub-campo | Tipo | Default | Descripción |
 |---|---|---|---|
 | `name` | string | `"EPSON LX-350"` | Nombre parcial o exacto de la impresora |
-| `fontName` | string | `"Courier New"` | Modos GDI y PDF |
-| `fontSize` | number | `9` | Modos GDI y PDF |
-| `bold` | boolean | `false` | Modos GDI y PDF |
-| `maxCharsPerLine` | number | `40` | Word-wrap en GDI y PDF |
+| `fontName` | string | `"Courier New"` | Modos GDI y CLÁSICO |
+| `fontSize` | number | `9` | Modos GDI y CLÁSICO |
+| `bold` | boolean | `false` | Modos GDI y CLÁSICO |
+| `maxCharsPerLine` | number | `40` | Word-wrap en GDI; corte de línea duro en CLÁSICO |
 | `copies` | number | `1` | Número de copias |
 
 ---
@@ -90,7 +88,7 @@ printers.slip     → para archivos Val*.txt
 Oracle Forms puede incrustar parámetros en el nombre del archivo separados por `~`:
 
 ```
-Rec~t9~fCourier_New~b0~pMTU-950~w40~43S.txt
+Rec~t9~fCourier_New~bN~pMTU-950~w40~43A.txt
 ```
 
 | Código | Parámetro | Valores | Default |
@@ -100,7 +98,7 @@ Rec~t9~fCourier_New~b0~pMTU-950~w40~43S.txt
 | `b` | `cBold` | `S`=Negrita, `N`=No negrita | `N` |
 | `p` | `cPrinterName` | nombre de impresora destino | — |
 | `w` | `cAnchoMaximo` | `10`–`255` | `40` |
-| `43` | `cImpresionDirecta` | `A`=Directa, `I`=GDI, `H`=Híbrido/PDF, `C`=Clásico/GDI+ VB | `A` |
+| `43` | `cImpresionDirecta` | `A`=Directa, `I`=GDI, `C`=Clásico/GDI+ VB | `A` |
 | `44` | `cNotificacion` | `S`=Habilitada, `N`=Deshabilitada | Usa `toastEnabled` de config |
 
 Cuando un archivo incluye parámetros, estos tienen prioridad sobre `config.json`. Los nombres legacy sin `~` (ej: `Rec20260706_143022.txt`) usan solo la configuración del JSON.
@@ -115,12 +113,11 @@ Ejecutar `node scripts/diagnostico.js` o `node -e "require('./src/filenameParser
 |---|---|---|
 | **DIRECT** | `"DIRECT"` | Envía el contenido del .txt directamente al spooler vía Winspool API (RAW). Ignora `fontName`, `fontSize`, `bold`, `maxCharsPerLine`. Equivale a `43A`. |
 | **GDI** | `"GDI"` | Imprime con **GDI nativo de Windows** vía FFI (`koffi` → `gdi32.dll`): `CreateDCW("WINSPOOL")` + `CreateFontW` (fuente TrueType, tamaño en puntos, negrita) + `TextOutW` línea por línea, enviado **a través del driver** de la impresora. Sin procesos externos (Session 0-safe). Respeta `fontName`, `fontSize`, `bold` y word-wrap por `maxCharsPerLine`. Equivale a `43I`. |
-| **PDF** | `"PDF"` | Renderiza el texto con word-wrap en un PDF usando **PDFKit** con mapeo a fuentes PDF estándar (Calibri/Arial → Helvetica, Courier New → Courier, etc.). El PDF se imprime con la estrategia descrita en [Impresión PDF](#impresión-pdf), produciendo un resultado visual similar al `DrawString` de VB.NET. Equivale a `43H`. |
 | **CLASSIC** | `"CLASSIC"` | Replica exacta del CBSprint.exe original: render GDI+ `DrawString` vía `PrintDocument` a través del driver de Windows (helper `scripts/print-classic.ps1`). Respeta fuentes TrueType, corte de línea duro a `maxCharsPerLine`, margen superior 3 mm y línea en blanco final, igual que `clsPrintManagement` del VB. Equivale a `43C`. |
 
 ### Modo CLÁSICO (43C): réplica del CBSprint.exe VB
 
-El modo `43C` reproduce el comportamiento real del utilitario VB.NET que reemplaza este servicio. A diferencia del modo `43I` (GDI nativo) y del `43H` (PDFKit), usa el **mismo motor de dibujo del original**: GDI+ `DrawString` sobre `PrintDocument`.
+El modo `43C` reproduce el comportamiento real del utilitario VB.NET que reemplaza este servicio. A diferencia del modo `43I` (GDI nativo), usa el **mismo motor de dibujo del original**: GDI+ `DrawString` sobre `PrintDocument`.
 
 | Aspecto | Comportamiento (idéntico a VB) |
 |---|---|
@@ -158,42 +155,10 @@ Características:
 - **Sin procesos externos**: a diferencia del modo CLÁSICO (`43C`), no invoca `powershell.exe`.
 - **Session 0-safe**: solo se envía el trabajo al spooler (igual que el modo CLÁSICO).
 - **Anti-bloqueo (worker thread + timeout)**: la secuencia GDI se ejecuta en un *worker thread* (`gdiWorker.js`), por lo que un driver colgado **nunca congela el servicio** ni la cola FIFO. Si el driver no responde en `gdiTimeoutMs` (default 60000 ms), el worker se termina y el archivo cae a la lógica normal de reintentos/errores.
-- **Guard PORTPROMPT**: las impresoras con puerto `PORTPROMPT` (p. ej. "Microsoft Print to PDF") piden nombre de archivo al imprimir; desde Session 0 eso colgaría el driver. El servicio lo detecta por registro y **falla rápido con un error claro**, sin esperar el timeout.
+- **Guard PORTPROMPT**: las impresoras virtuales con puerto `PORTPROMPT` piden interacción al imprimir; desde Session 0 eso colgaría el driver. El servicio lo detecta por registro y **falla rápido con un error claro**, sin esperar el timeout.
 - Los parámetros del nombre del archivo (`f`, `t`, `b`, `w`) tienen prioridad sobre `config.json`, como en todos los modos.
 
 > **Diferencia con CLÁSICO (`43C`):** ambos usan el driver de Windows. `43I` dibuja el texto con GDI clásico (`TextOutW`, word-wrap) directamente desde Node; `43C` replica exactamente el `DrawString` + `PrintDocument` del VB.NET (corte de línea duro, margen 3 mm, línea final en blanco) vía PowerShell.
-
----
-
-## Impresión PDF
-
-> **Problema conocido:** imprimir PDF con `Start-Process -Verb PrintTo/Print` (shell de Windows) depende de la **asociación de aplicaciones para `.pdf`**, que es *por-usuario* (`HKCU`) y **no existe en el contexto de un Windows Service** (Session 0 / LocalSystem). Por eso el modo PDF fallaba con *"No hay ninguna aplicación asociada con el archivo especificado"*.
-
-El modo PDF usa esta **estrategia en cascada** (todas funcionan en Session 0):
-
-| Prioridad | Estrategia | Cómo | Cuándo |
-|---|---|---|---|
-| 1 | **Ghostscript `mswinpr2`** | `gswin64c -sDEVICE=mswinpr2 -sOutputFile="%printer%<nombre>"` — envía el PDF **a través del driver** de la impresora | Recomendado para **impresoras matriciales/GDI**. Requiere instalar Ghostscript (se detecta vía `ghostscriptPath`, PATH o `C:\Program Files\gs`) |
-| 2 | **RAW vía Winspool** | `WritePrinter` del módulo nativo (igual que el modo DIRECT), sin shell | Funciona para impresoras compatibles con **PDF/PCL directo** |
-| 3 | **Shell `PrintTo`/`Print`** | `Start-Process -Verb PrintTo` (último recurso) | Solo en entornos con verbo de impresión registrado a nivel máquina |
-
-Instalar Ghostscript para impresoras matriciales: descargar de https://ghostscript.com (instalación por defecto en `C:\Program Files\gs`) o fijar la ruta en `config.json` → `ghostscriptPath`.
-
-> **Nota para pruebas:** si la impresora configurada es **"Microsoft Print to PDF"** (puerto `PORTPROMPT`), es una impresora *virtual*: el driver pide un nombre de archivo al imprimir, y un servicio en Session 0 no puede mostrar ese diálogo (el trabajo queda colgado). Para probar el modo PDF use una impresora real o la **captura de PDF en desarrollo** (más abajo).
-
-### Validación de PDFs en desarrollo
-
-Para **ver** el PDF exacto que el servicio genera en modo `43H` (sin depender de impresoras ni puertos):
-
-1. Configurar `pdfCaptureFolder` en `config.json` (ej. `C:\Impresiones\PDF_Captura`). Vacío = deshabilitado (producción no se ve afectada).
-2. (Opcional) Instalar **Ghostscript** de https://ghostscript.com (instalación por defecto en `C:\Program Files\gs`) — habilita la ruta de impresión `mswinpr2` del modo PDF.
-3. Reiniciar el servicio y depositar un archivo con `43H` en la carpeta vigilada:
-   ```
-   Rec~43H~pImpresora~contenido del recibo.txt
-   ```
-4. El PDF capturado aparece en `pdfCaptureFolder` con nombre `AAAA-MM-DDTHH-mm-ss_<titulo>.pdf`.
-
-Cada impresión genera un archivo nuevo (nunca sobrescribe). Si `pdfCaptureFolder` está vacío o la carpeta no es escribible, la impresión continúa normalmente y solo se registra una advertencia en el log.
 
 ---
 
@@ -220,8 +185,8 @@ Servicio (Session 0)                    Vigilante (Session 3 - escritorio del us
 | Archivo | Ubicación | Función |
 |---|---|---|
 | `notifier.js` | `src/` | Escribe archivos `.txt` en la carpeta Alertas |
-| `alert-watcher.ps1` | `scripts/` | Monitorea Alertas, muestra MessageBox, elimina archivo |
-| `install-alert-watcher.bat` | `scripts/` | Registra el vigilante en el Startup de Windows |
+| `cbs-alert-watcher.jar` | `scripts/` | Vigilante Java: monitorea Alertas, muestra MessageBox y elimina el archivo |
+| `install-alert-watcher.bat` | `scripts/` | Registra el vigilante Java en el Programador de tareas |
 
 ### Eventos notificados
 
@@ -266,11 +231,11 @@ Rec~a1contenido.txt        → Usa el valor de config.json
 
 El vigilante se instala automáticamente durante la post-instalación. Para instalarlo manualmente:
 
-```powershell
-& "C:\CBS\PrintService\scripts\install-alert-watcher.bat"
+```batch
+C:\CBS\PrintService\scripts\install-alert-watcher.bat
 ```
 
-Después **cerrar sesión y volver a entrar** para que arranque. El vigilante aparece como ícono en la bandeja del sistema (system tray).
+El instalador exige Java 17 o superior en `PATH` o `JAVA_HOME`. El vigilante se inicia de inmediato y también en cada inicio de sesión.
 
 ---
 
@@ -297,11 +262,9 @@ Después **cerrar sesión y volver a entrar** para que arranque. El vigilante ap
 | `populate-printers.js` | Detecta impresora por defecto y la asigna a `printers.voucher.name` / `printers.slip.name` en `config.json` |
 | `apply-settings.js` | Aplica rutas de carpetas elegidas durante setup.exe |
 | `find-node.js` / `find-node.cmd` | Localiza Node.js (system PATH o bundled portable) |
-| `alert-watcher.ps1` | Vigilante de alertas — monitorea la carpeta Alertas y muestra MessageBox (corre en sesión del usuario) |
-| `install-alert-watcher.bat` | Instala el vigilante en la carpeta Startup del usuario actual |
+| `build-alert-watcher.bat` | Compila `java/AlertWatcher.java` en el JAR del vigilante (requiere JDK 17+) |
+| `install-alert-watcher.bat` | Registra el vigilante Java para iniciar en la sesión del usuario |
 | `print-classic.ps1` | Helper del **modo CLÁSICO (43C)**: imprime con GDI+ `DrawString` (réplica del CBSprint.exe VB) vía `PrintDocument` |
-| `install-virtual-printer.ps1` | **[Admin]** Crea una impresora virtual de captura (driver "Microsoft Print To PDF" + puerto local de archivo fijo). ⚠️ En la práctica el driver **ignora el puerto de archivo** y no escribe el PDF; para validar use `pdfCaptureFolder`. Ver [Validación de PDFs](#validación-de-pdfs-en-desarrollo) |
-| `uninstall-virtual-printer.ps1` | **[Admin]** Elimina la impresora virtual de captura y su puerto local |
 
 ### npm scripts (`package.json`)
 
@@ -382,7 +345,6 @@ cbs-print-service/
 │   ├── printer.js           # Envío a impresora vía Winspool API
 │   ├── gdiPrinter.js        # Modo GDI real (43I): GDI nativo vía koffi → gdi32.dll (worker + timeout + guard PORTPROMPT)
 │   ├── gdiWorker.js         # Secuencia GDI (CreateDCW/CreateFontW/TextOutW) en worker thread (anti-bloqueo)
-│   ├── pdfPrinter.js        # Renderizado modo PDF (PDFKit + driver Windows)
 │   ├── classicPrinter.js    # Renderizado modo CLÁSICO 43C (GDI+ VB vía print-classic.ps1)
 │   ├── logger.js            # Logging rotativo (winston)
 │   ├── filenameParser.js    # Parseo de parámetros en nombre de archivo
@@ -395,10 +357,10 @@ cbs-print-service/
 │   ├── apply-settings.js
 │   ├── find-node.js
 │   ├── find-node.cmd
-│   ├── alert-watcher.ps1        # Vigilante de alertas (corre en sesión del usuario)
-│   ├── install-alert-watcher.bat # Instala vigilante en Startup del usuario
-│   ├── install-virtual-printer.ps1   # [Admin] Impresora virtual de captura PDF (puerto de archivo fijo)
-│   └── uninstall-virtual-printer.ps1 # [Admin] Elimina la impresora virtual de captura
+│   ├── build-alert-watcher.bat   # Compila el vigilante Java
+│   └── install-alert-watcher.bat # Registra el vigilante Java
+├── java/
+│   └── AlertWatcher.java         # Vigilante Java de alertas visuales
 ├── tests/                   # Tests unitarios
 │   ├── filenameParser.test.js
 │   ├── fileProcessor.test.js
@@ -437,7 +399,6 @@ CBS Print Service (Session 0)
   │
   │ ├── DIRECT:  printDirect() → Winspool API (RAW)
   │ ├── GDI:     printGdi() → gdi32.dll (CreateDCW/CreateFontW/TextOutW) → driver de Windows
-  │ ├── PDF:     renderPdfBuffer() → Start-Process -Verb PrintTo → driver de Windows
   │ └── CLASSIC: printClassic() → print-classic.ps1 → GDI+ DrawString → driver de Windows
   │
   ├──► Impresora
@@ -447,7 +408,7 @@ CBS Print Service (Session 0)
   └──► C:\Impresiones\Alertas\ (archivo .txt)
          │
          ▼
-       alert-watcher.ps1 (Session 3 - escritorio del usuario)
+        cbs-alert-watcher.jar (Session 3 - escritorio del usuario)
          │ detecta archivo
          ▼
        MessageBox nativo de Windows
@@ -476,11 +437,8 @@ CBS Print Service (Session 0)
 | 1.2.0 | Jul 2026 | Notificaciones toast de Windows, parámetro 44 para control por archivo, configuración toastEnabled/toastOnSuccess/toastOnError |
 | 1.6.0 | Jul 2026 | Sincronización de versiones en todos los archivos de configuración |
 | 1.7.0 | Jul 2026 | Eliminación de dependencia node-notifier, notificaciones nativas via mshta.exe |
-| 1.8.0 | Jul 2026 | Arquitectura de notificaciones dual: servicio escribe archivos + vigilante (alert-watcher.ps1) muestra MessageBox en la sesión del usuario. Eliminación de node-notifier. Instalación automática del vigilante en Startup. |
-| 1.9.0 | Jul 2026 | Fix ventana PowerShell al iniciar sesión: wrapper VBS oculto (launch-alert-watcher.vbs). Fix alertas no mostradas: alert-watcher.ps1 ahora lee ruta desde config.json. Tarea programada CBSAlertWatcher con trigger inmediato tras registro. |
 | 1.9.1 | Jul 2026 | Eliminado parámetro `m` (cMetodo) del parser de nombres — era legacy y no afectaba la impresión. Corrección de valores `43S`/`43N` a `43A`/`43I` en documentación. |
 | 1.9.2 | Jul 2026 | Se realizan correcciones para los parametros de tipo de letra y tamaño de letra. |
-| 2.1.0 | Jul 2026 | Nuevo modo **PDF/Híbrido** (`43H`). Renderiza el texto con fuentes reales mediante PDFKit y lo imprime a través del driver de Windows (`Start-Process -Verb PrintTo`), replicando el comportamiento del `DrawString` de VB.NET. Se agrega módulo `pdfPrinter.js` y dependencia `pdfkit`. |
 | 2.2.0 | Ago 2026 | Bump de versión a 2.2.0. |
 | 3.0.0 | Ago 2026 | Nuevo modo **CLÁSICO** (`43C`): réplica exacta del CBSprint.exe VB mediante GDI+ `DrawString` vía `PrintDocument` (helper `scripts/print-classic.ps1`). Se agregan `classicPrinter.js`, `print-classic.ps1` y `tests/classicPrinter.test.js`. Bump de versión a 3.0.0. |
 | 3.1.0 | Ago 2026 | El modo **GDI** (`43I`) pasa de ESC/POS a **GDI nativo de Windows**: `gdi32.dll` vía FFI (`koffi`) con `CreateDCW`/`CreateFontW`/`TextOutW` a través del driver de la impresora. Fuente TrueType real, tamaño en puntos, negrita y word-wrap. Sin procesos externos (Session 0-safe). Se agrega dependencia `koffi` y se reescribe `gdiPrinter.js`. **Anti-bloqueo**: la secuencia GDI se ejecuta en un worker thread (`gdiWorker.js`) con timeout configurable (`gdiTimeoutMs`, default 60000) y guard de puerto `PORTPROMPT` (falla rápido con error claro en vez de colgar el servicio); la cola FIFO y el vigilante nunca se congelan. |
