@@ -9,7 +9,7 @@
 setlocal
 
 set "WATCHER_JAR=%~dp0cbs-alert-watcher.jar"
-set "JAVA_EXE=javaw.exe"
+set "JAVA_EXE="
 
 :: Elimina la implementación PowerShell anterior antes de registrar Java.
 wmic process where "name='powershell.exe' and commandline like '%%alert-watcher.ps1%%'" call terminate >nul 2>&1
@@ -20,17 +20,14 @@ if not exist "%WATCHER_JAR%" (
     if errorlevel 1 exit /b 1
 )
 
-where javaw.exe >nul 2>&1
-if errorlevel 1 if defined JAVA_HOME if exist "%JAVA_HOME%\bin\javaw.exe" set "JAVA_EXE=%JAVA_HOME%\bin\javaw.exe"
+if defined JAVA_HOME if exist "%JAVA_HOME%\bin\javaw.exe" set "JAVA_EXE=%JAVA_HOME%\bin\javaw.exe"
+if not defined JAVA_EXE for /f "delims=" %%I in ('where javaw.exe 2^>nul') do if not defined JAVA_EXE set "JAVA_EXE=%%I"
 
-if not "%JAVA_EXE%"=="javaw.exe" if exist "%JAVA_EXE%" goto java_found
-where javaw.exe >nul 2>&1
-if errorlevel 1 (
+if not defined JAVA_EXE (
     echo [ERROR] Java 17 o superior no esta disponible. Instale Java y configure PATH o JAVA_HOME.
     exit /b 1
 )
 
-:java_found
 echo Instalando vigilante Java de alertas via Task Scheduler...
 
 schtasks.exe /Create /TN "\CBS Print Service\CBSAlertWatcher" /TR "\"%JAVA_EXE%\" -jar \"%WATCHER_JAR%\" \"%~dp0..\"" /SC ONLOGON /RU "%USERNAME%" /RL LIMITED /F

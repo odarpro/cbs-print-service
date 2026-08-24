@@ -13,7 +13,7 @@
 
   "printers": {
     "voucher": {
-      "name":            "EPSON TM-U950",
+      "name":            "Recibos",
       "fontName":        "Courier New",
       "fontSize":        9,
       "bold":            false,
@@ -21,7 +21,7 @@
       "copies":          1
     },
     "slip": {
-      "name":            "EPSON TM-U950",
+      "name":            "Cheques",
       "fontName":        "Courier New",
       "fontSize":        9,
       "bold":            false,
