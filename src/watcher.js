@@ -12,6 +12,9 @@ const path          = require('path');
 const chokidar      = require('chokidar');
 const logger        = require('./logger');
 const FileProcessor = require('./fileProcessor');
+const { normalizeRetentionDays, removeExpiredFiles } = require('./retentionCleaner');
+
+const RETENTION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 class FolderWatcher {
   /**
@@ -21,6 +24,7 @@ class FolderWatcher {
     this.config    = config;
     this.processor = new FileProcessor(config);
     this._watcher  = null;
+    this._retentionTimer = null;
   }
 
   /**
@@ -33,6 +37,8 @@ class FolderWatcher {
 
     // Crear carpetas necesarias si no existen
     this._ensureFolders();
+    this._cleanExpiredFiles();
+    this._retentionTimer = setInterval(() => this._cleanExpiredFiles(), RETENTION_CHECK_INTERVAL_MS);
 
     log.info('Iniciando monitoreo de carpeta', { watchFolder });
 
@@ -60,6 +66,10 @@ class FolderWatcher {
    * Detiene el monitoreo (llamado al detener el servicio).
    */
   async stop() {
+    if (this._retentionTimer) {
+      clearInterval(this._retentionTimer);
+      this._retentionTimer = null;
+    }
     if (this._watcher) {
       await this._watcher.close();
       this._watcher = null;
@@ -98,6 +108,32 @@ class FolderWatcher {
       if (!fs.existsSync(alertDir)) {
         fs.mkdirSync(alertDir, { recursive: true });
         logger.get().info(`Carpeta creada: ${alertDir}`);
+      }
+    }
+  }
+
+  _cleanExpiredFiles() {
+    const log = logger.get();
+    const cfg = this.config;
+    const folders = [
+      { name: 'Histórico', dir: cfg.historyFolder, days: normalizeRetentionDays(cfg.historyRetentionDays, 30) },
+      { name: 'Errores', dir: cfg.errorFolder, days: normalizeRetentionDays(cfg.errorRetentionDays, 90) },
+      {
+        name: 'Alertas',
+        dir: cfg.logFolder ? path.join(path.dirname(cfg.logFolder), 'Alertas') : null,
+        days: normalizeRetentionDays(cfg.alertRetentionDays, 7)
+      }
+    ];
+
+    for (const folder of folders) {
+      const result = removeExpiredFiles(folder.dir, folder.days);
+      if (result.deleted || result.errors) {
+        log.info('Limpieza de retención completada', {
+          folder: folder.name,
+          retentionDays: folder.days,
+          deleted: result.deleted,
+          errors: result.errors
+        });
       }
     }
   }

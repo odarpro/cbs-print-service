@@ -5,6 +5,9 @@
   "logFolder":           "D:\\Impresiones\\Logs",
   "logLevel":            "info",
   "logRetentionDays":    30,
+  "historyRetentionDays": 30,
+  "errorRetentionDays":  90,
+  "alertRetentionDays":  7,
 
   "printMethod":         "DIRECT",
 

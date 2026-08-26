@@ -77,6 +77,9 @@ if exist "%INSTALL_DIR%\scripts\uninstall-service.js" (
 :: ── 1b) Eliminar tarea programada del vigilante Java de alertas ────────────
 echo [1b] Eliminando tarea programada del vigilante de alertas...
 echo [%DATE% %TIME%] Eliminando watcher de alertas... >> "%UNINSTALL_LOG%"
+if exist "%INSTALL_DIR%\scripts\stop-alert-watcher.bat" (
+    call "%INSTALL_DIR%\scripts\stop-alert-watcher.bat" >> "%UNINSTALL_LOG%" 2>&1
+)
 schtasks.exe /End /TN "\CBS Print Service\CBSAlertWatcher" >> "%UNINSTALL_LOG%" 2>&1
 schtasks.exe /Delete /TN "\CBS Print Service\CBSAlertWatcher" /F >> "%UNINSTALL_LOG%" 2>&1
 if %errorLevel% neq 0 (

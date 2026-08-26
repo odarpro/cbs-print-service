@@ -14,6 +14,7 @@ import java.nio.file.WatchService;
 import java.util.Comparator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
@@ -102,16 +103,26 @@ public final class AlertWatcher {
           : content.contains("[AVISO]") ? JOptionPane.WARNING_MESSAGE
           : JOptionPane.INFORMATION_MESSAGE;
 
-      SwingUtilities.invokeLater(() -> {
-        try {
-          JOptionPane.showMessageDialog(null, body, title, messageType);
-        } finally {
-          deleteAlert(file);
-        }
-      });
+      // Esperar el cierre del diálogo evita que varias alertas queden apiladas.
+      SwingUtilities.invokeAndWait(() -> showAlert(title, body, messageType));
+      deleteAlert(file);
     } catch (IOException exception) {
       log("No se pudo leer " + file.getFileName() + ": " + exception.getMessage());
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      log("Se interrumpió la alerta " + file.getFileName());
+    } catch (Exception exception) {
+      log("No se pudo mostrar " + file.getFileName() + ": " + exception.getMessage());
     }
+  }
+
+  private static void showAlert(String title, String body, int messageType) {
+    JOptionPane pane = new JOptionPane(body, messageType);
+    JDialog dialog = pane.createDialog(null, title);
+    dialog.setAlwaysOnTop(true);
+    dialog.setLocationRelativeTo(null);
+    dialog.setVisible(true);
+    dialog.dispose();
   }
 
   private static void deleteAlert(Path file) {

@@ -32,7 +32,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_3.1.0_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.2.0_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -53,6 +53,9 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `logFolder` | string | `D:\Impresiones\Logs` | Carpeta de logs rotativos diarios |
 | `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
+| `historyRetentionDays` | number | `30` | Días de retención de archivos en `historyFolder` |
+| `errorRetentionDays` | number | `90` | Días de retención de archivos en `errorFolder` |
+| `alertRetentionDays` | number | `7` | Días de retención de alertas no leídas en la carpeta `Alertas` |
 | `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43C` = Clásico/GDI+ VB |
 | `gdiTimeoutMs` | number | `60000` | (Modo GDI real `43I`) Timeout del worker thread en ms. Si el driver no responde, el worker se termina y el archivo sigue la lógica de reintentos/errores |
 | `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
@@ -64,6 +67,8 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `toastEnabled` | boolean | `true` | Habilitar notificaciones toast de Windows |
 | `toastOnSuccess` | boolean | `true` | Mostrar toast al imprimir exitosamente |
 | `toastOnError` | boolean | `true` | Mostrar toast al fallar impresión o parámetros inválidos |
+
+Las retenciones de Histórico, Errores y Alertas se revisan al iniciar el servicio y cada hora. Los archivos vencidos se eliminan según su fecha de modificación. `watchFolder` no se limpia automáticamente para no borrar trabajos pendientes; los logs conservan su limpieza diaria mediante `logRetentionDays`.
 
 ### `printers` — Configuración por tipo de documento
 
@@ -236,6 +241,25 @@ C:\CBS\PrintService\scripts\install-alert-watcher.bat
 ```
 
 El instalador exige Java 17 o superior en `PATH` o `JAVA_HOME`. El vigilante se inicia de inmediato y también en cada inicio de sesión.
+
+### Verificar el vigilante activo
+
+Ejecutar en PowerShell para comprobar que el vigilante Java está activo:
+
+```powershell
+$watchers = Get-CimInstance Win32_Process | Where-Object {
+  ($_.Name -eq 'java.exe' -or $_.Name -eq 'javaw.exe') -and
+  $_.CommandLine -like '*cbs-alert-watcher.jar*'
+}
+
+if ($watchers) {
+  $watchers | Select-Object ProcessId, Name, SessionId, CommandLine
+} else {
+  'El vigilante de alertas no está activo.'
+}
+```
+
+La salida debe mostrar un proceso `javaw.exe` o `java.exe` que ejecute `cbs-alert-watcher.jar`.
 
 ---
 
@@ -442,3 +466,4 @@ CBS Print Service (Session 0)
 | 2.2.0 | Ago 2026 | Bump de versión a 2.2.0. |
 | 3.0.0 | Ago 2026 | Nuevo modo **CLÁSICO** (`43C`): réplica exacta del CBSprint.exe VB mediante GDI+ `DrawString` vía `PrintDocument` (helper `scripts/print-classic.ps1`). Se agregan `classicPrinter.js`, `print-classic.ps1` y `tests/classicPrinter.test.js`. Bump de versión a 3.0.0. |
 | 3.1.0 | Ago 2026 | El modo **GDI** (`43I`) pasa de ESC/POS a **GDI nativo de Windows**: `gdi32.dll` vía FFI (`koffi`) con `CreateDCW`/`CreateFontW`/`TextOutW` a través del driver de la impresora. Fuente TrueType real, tamaño en puntos, negrita y word-wrap. Sin procesos externos (Session 0-safe). Se agrega dependencia `koffi` y se reescribe `gdiPrinter.js`. **Anti-bloqueo**: la secuencia GDI se ejecuta en un worker thread (`gdiWorker.js`) con timeout configurable (`gdiTimeoutMs`, default 60000) y guard de puerto `PORTPROMPT` (falla rápido con error claro en vez de colgar el servicio); la cola FIFO y el vigilante nunca se congelan. |
+| 3.2.0 | Ago 2026 | Retención configurable para Histórico, Errores y Alertas. El vigilante Java procesa alertas una por una, las muestra centradas y en primer plano, y su desinstalación finaliza procesos Java asociados. |
