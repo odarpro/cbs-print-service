@@ -1,11 +1,11 @@
 # CBS Print Service
 
-Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watchFolder`, detecta archivos `Rec*.txt` / `Val*.txt` generados por Oracle Forms y los envía a impresora en cuatro modos:
+Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watchFolder`, detecta archivos `Rec*.txt` / `Val*.txt` generados por Oracle Forms y los envía a impresora en tres modos:
 
 | Modo | Código | Descripción |
 |------|--------|-------------|
 | **DIRECT** | `43A` | RAW directo al spooler vía Winspool API — sin procesos externos |
-| **GDI** | `43I` | Word-wrap + códigos ESC/POS para control de fuente/tamaño/negrita en impresoras compatibles |
+| **GDI** | `43I` | GDI nativo de Windows con word-wrap, fuente, tamaño y negrita a través del driver de la impresora |
 | **CLASSIC** | `43C` | Replica exacta del CBSprint.exe VB: render GDI+ `DrawString` vía `PrintDocument` a través del driver de Windows |
 
 ---
@@ -56,8 +56,9 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `historyRetentionDays` | number | `30` | Días de retención de archivos en `historyFolder` |
 | `errorRetentionDays` | number | `90` | Días de retención de archivos en `errorFolder` |
 | `alertRetentionDays` | number | `7` | Días de retención de alertas no leídas en la carpeta `Alertas` |
-| `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (word-wrap + ESC/POS) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43C` = Clásico/GDI+ VB |
+| `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (GDI nativo con word-wrap) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43C` = Clásico/GDI+ VB |
 | `gdiTimeoutMs` | number | `60000` | (Modo GDI real `43I`) Timeout del worker thread en ms. Si el driver no responde, el worker se termina y el archivo sigue la lógica de reintentos/errores |
+| `classicTimeoutMs` | number | `60000` | (Modo CLÁSICO `43C`) Timeout de PowerShell en ms. Si el driver no responde, se finaliza el árbol de procesos y el archivo sigue la lógica de reintentos/errores |
 | `fileEncoding` | string | `"latin1"` | Codificación de archivo (`"latin1"` = Windows-1252) |
 | `fileAction` | string | `"MOVE"` | Post-impresión: `"MOVE"` (a historyFolder) o `"DELETE"` |
 | `pollingIntervalMs` | number | `1000` | Intervalo de sondeo en ms para detectar archivos |
@@ -104,7 +105,7 @@ Rec~t9~fCourier_New~bN~pMTU-950~w40~43A.txt
 | `p` | `cPrinterName` | nombre de impresora destino | — |
 | `w` | `cAnchoMaximo` | `10`–`255` | `40` |
 | `43` | `cImpresionDirecta` | `A`=Directa, `I`=GDI, `C`=Clásico/GDI+ VB | `A` |
-| `44` | `cNotificacion` | `S`=Habilitada, `N`=Deshabilitada | Usa `toastEnabled` de config |
+| `44` | `cNotificacion` | `A`=Activa/Habilitada, `I`=Inactiva/Deshabilitada | Usa `toastEnabled` de config |
 
 Cuando un archivo incluye parámetros, estos tienen prioridad sobre `config.json`. Los nombres legacy sin `~` (ej: `Rec20260706_143022.txt`) usan solo la configuración del JSON.
 
@@ -221,15 +222,15 @@ En `config.json`:
 Se puede sobreescribir el comportamiento por archivo usando el parámetro `44` en el nombre:
 
 ```
-Rec~44S~a1contenido.txt    → Forzar notificación para este archivo
-Rec~44I~a1contenido.txt    → Deshabilitar notificación para este archivo
-Rec~a1contenido.txt        → Usa el valor de config.json
+Rec~44A~contenido.txt      → Forzar notificación para este archivo
+Rec~44I~contenido.txt      → Deshabilitar notificación para este archivo
+Rec20260706_143022.txt     → Usa el valor de config.json
 ```
 
 ### Prioridad de resolución
 
 ```
-44S/44I en archivo  >  toastEnabled en config.json  >  default: true
+44A/44I en archivo  >  toastEnabled en config.json  >  default: true
 ```
 
 ### Instalación del vigilante
