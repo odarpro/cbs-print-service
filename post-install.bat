@@ -1,5 +1,6 @@
 @echo off
 cd /d "%~dp0"
+set SERVICE_KEY=cbsprintservice.exe
 
 REM Detectar qué Node.js usar (system PATH o bundled portable)
 for /f "delims=" %%i in ('node scripts\find-node.cmd 2^>nul') do set NODE_EXE=%%i
@@ -28,14 +29,14 @@ echo [%DATE% %TIME%] Registrando servicio... >> install.log 2>&1
 %NODE_EXE% scripts\install-service.js >> install.log 2>&1
 if errorlevel 1 (
     echo [%DATE% %TIME%] AVISO: install-service.js fallo, reintentando net start... >> install.log 2>&1
-    net start CBSPrintService >> install.log 2>&1
+    net start %SERVICE_KEY% >> install.log 2>&1
 )
 
 echo [%DATE% %TIME%] Verificando estado del servicio... >> install.log 2>&1
-sc query CBSPrintService | findstr /I "RUNNING" >nul
+sc query %SERVICE_KEY% | findstr /I "RUNNING" >nul
 if errorlevel 1 (
     echo [%DATE% %TIME%] AVISO: el servicio no quedo en estado RUNNING. >> install.log 2>&1
-    echo [%DATE% %TIME%] Ejecute manualmente: net start CBSPrintService >> install.log 2>&1
+    echo [%DATE% %TIME%] Ejecute manualmente: net start %SERVICE_KEY% >> install.log 2>&1
 ) else (
     echo [%DATE% %TIME%] Servicio en RUNNING. >> install.log 2>&1
 )

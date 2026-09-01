@@ -6,6 +6,7 @@
 :: =============================================================================
 
 setlocal
+set SERVICE_KEY=cbsprintservice.exe
 
 title CBS Print Service - Estado
 
@@ -16,7 +17,7 @@ echo.
 
 :: ── 1. Estado del servicio en SCM ─────────────────────────────────────────────
 echo [SERVICIO WINDOWS]
-sc query CBSPrintService | findstr /I "STATE SERVICE_NAME"
+sc query %SERVICE_KEY% | findstr /I "STATE ESTADO NOMBRE_SERVICIO SERVICE_NAME"
 echo.
 
 :: ── 2. Health check (si existe) ───────────────────────────────────────────────

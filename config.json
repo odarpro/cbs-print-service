@@ -11,7 +11,7 @@
 
   "printMethod":         "DIRECT",
 
-  "gdiTimeoutMs":        5000,
+  "gdiTimeoutMs":        5000,//equivale a 5 segundos
   "classicTimeoutMs":    5000,
 
   "printers": {

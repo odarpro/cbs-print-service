@@ -33,6 +33,7 @@ if %errorLevel% neq 0 (
 
 :: ── Ruta de instalacion ──────────────────────────────────────────────────────
 set INSTALL_DIR=C:\CBS\PrintService
+set SERVICE_KEY=cbsprintservice.exe
 set SOURCE_DIR=%~dp0
 
 echo Directorio fuente   : %SOURCE_DIR%
@@ -201,14 +202,14 @@ echo Servicio registrado. >> "%INSTALL_LOG%"
 
 :: ── Verificar que el servicio esté corriendo ──
 echo Verificando estado del servicio...
-net start CBSPrintService >nul 2>&1
+net start %SERVICE_KEY% >nul 2>&1
 if !errorLevel! neq 0 (
     echo [WARN] El servicio no pudo iniciarse automaticamente.
     echo        Iniciando manualmente via net start...
-    net start CBSPrintService >nul 2>&1
+    net start %SERVICE_KEY% >nul 2>&1
     if !errorLevel! neq 0 (
         echo [WARN] No se pudo iniciar el servicio. Inicielo manualmente con:
-        echo        net start CBSPrintService
+        echo        net start %SERVICE_KEY%
         echo        o desde Servicios (services.msc)
         echo Servicio NO iniciado. >> "%INSTALL_LOG%"
     ) else (

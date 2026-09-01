@@ -29,6 +29,7 @@ if %errorLevel% neq 0 (
 )
 
 set INSTALL_DIR=C:\CBS\PrintService
+set SERVICE_KEY=cbsprintservice.exe
 
 echo Se eliminara el servicio y los archivos en:
 echo   %INSTALL_DIR%
@@ -97,14 +98,13 @@ if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CBSAlertWatche
 echo.
 echo [2/3] Asegurando que el servicio esté detenido y eliminado (fallback)...
 echo Deteniendo servicio (si existe) >> "%UNINSTALL_LOG%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Try { Stop-Service -Name 'CBSPrintService' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; } Catch { }"
-sc.exe delete "CBSPrintService" >> "%UNINSTALL_LOG%" 2>&1 || echo sc.exe delete devolvio error >> "%UNINSTALL_LOG%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Try { Stop-Service -Name '%SERVICE_KEY%' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; } Catch { }"
+sc.exe delete "%SERVICE_KEY%" >> "%UNINSTALL_LOG%" 2>&1 || echo sc.exe delete devolvio error >> "%UNINSTALL_LOG%"
 
 :: Comprobar si sigue existiendo
-sc query "CBSPrintService" > "%TEMP%\cbs_svc_query.txt" 2>&1
-findstr /I /C:"SERVICE_NAME: CBSPrintService" "%TEMP%\cbs_svc_query.txt" >nul 2>&1
+sc query "%SERVICE_KEY%" > "%TEMP%\cbs_svc_query.txt" 2>&1
 if %errorlevel% equ 0 (
-    echo [ERROR] El servicio CBSPrintService sigue existiendo. Revisa permisos/logs. >> "%UNINSTALL_LOG%"
+    echo [ERROR] El servicio %SERVICE_KEY% sigue existiendo. Revisa permisos/logs. >> "%UNINSTALL_LOG%"
     echo El servicio sigue existiendo. Revisa %UNINSTALL_LOG% para detalles.
 ) else (
     echo Servicio eliminado o no existente. >> "%UNINSTALL_LOG%"

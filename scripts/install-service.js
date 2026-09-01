@@ -18,6 +18,8 @@ const { execFile } = require('child_process');
 const Service     = require('node-windows').Service;
 
 const SERVICE_NAME        = 'CBSPrintService';
+const SERVICE_ID          = 'cbsprintservice';
+const SERVICE_KEY         = `${SERVICE_ID}.exe`;
 const SERVICE_DESCRIPTION = 'CBS Servicio de Impresion Directa para Impresoras Matriciales';
 const SERVICE_SCRIPT      = path.join(__dirname, '..', 'src', 'index.js');
 const TIMEOUT_MS          = 180000;
@@ -42,7 +44,7 @@ const finish = (code) => {
 const timeout = setTimeout(() => {
   console.error(`\n[ERROR] Tiempo de espera agotado (${TIMEOUT_MS / 1000}s) al instalar/iniciar el servicio.`);
   console.error('       Ejecute manualmente como Administrador:');
-  console.error(`         net start ${SERVICE_NAME}`);
+  console.error(`         net start ${SERVICE_KEY}`);
   finish(1);
 }, TIMEOUT_MS);
 
@@ -61,18 +63,16 @@ function runSc(args) {
 async function waitRegistered(ms) {
   const start = Date.now();
   while (Date.now() - start < ms) {
-    const res = await runSc(['query', SERVICE_NAME]);
-    // "sc query" devuelve 0 solo si el servicio existe; el código de salida
-    // no depende del idioma del sistema (la etiqueta sí: SERVICE_NAME /
-    // NOMBRE_SERVICIO). El nombre del servicio tampoco se localiza.
-    if (res.code === 0 && res.out.includes(SERVICE_NAME)) return true;
+    const res = await runSc(['query', SERVICE_KEY]);
+    // El código de salida de sc.exe no depende del idioma del sistema.
+    if (res.code === 0) return true;
     await delay(1000);
   }
   return false;
 }
 
 async function isRunning() {
-  const res = await runSc(['query', SERVICE_NAME]);
+  const res = await runSc(['query', SERVICE_KEY]);
   // sc.exe solo traduce las etiquetas (STATE/ESTADO), pero el estado
   // (RUNNING/STOPPED/...) y el código numérico son universales.
   return /(?:STATE|ESTADO)\s*:\s*\d+\s*RUNNING/i.test(res.out) ||
@@ -82,7 +82,7 @@ async function isRunning() {
 async function startWithRetry() {
   for (let attempt = 1; attempt <= START_MAX_RETRIES; attempt++) {
     console.log(`       Intento ${attempt}/${START_MAX_RETRIES}...`);
-    await runSc(['start', SERVICE_NAME]);
+    await runSc(['start', SERVICE_KEY]);
     if (await isRunning()) return true;
     if (attempt < START_MAX_RETRIES) await delay(START_RETRY_MS);
   }
@@ -91,7 +91,7 @@ async function startWithRetry() {
 
 const svc = new Service({
   name:         SERVICE_NAME,
-  id:           SERVICE_NAME,
+  id:           SERVICE_ID,
   description:  SERVICE_DESCRIPTION,
   script:       SERVICE_SCRIPT,
   execPath:     EXEC_PATH,
@@ -133,7 +133,7 @@ svc.on('install', async () => {
   } else {
     console.error(`[ERROR] No se pudo iniciar el servicio tras ${START_MAX_RETRIES} intentos.`);
     console.error('        Ejecute manualmente como Administrador:');
-    console.error(`          net start ${SERVICE_NAME}`);
+    console.error(`          net start ${SERVICE_KEY}`);
     finish(1);
   }
 });
@@ -156,7 +156,7 @@ svc.on('alreadyinstalled', async () => {
     finish(0);
   } else {
     console.error('[ERROR] No se pudo iniciar el servicio. Ejecute como Administrador:');
-    console.error(`          net start ${SERVICE_NAME}`);
+    console.error(`          net start ${SERVICE_KEY}`);
     finish(1);
   }
 });
@@ -169,7 +169,7 @@ svc.on('error', (err) => {
 
 svc.on('invalidinstallation', () => {
   console.error('[ERROR] Instalación inválida.');
-  console.error('       Intente ejecutar: sc delete CBSPrintService');
+  console.error(`       Intente ejecutar: sc delete ${SERVICE_KEY}`);
   finish(1);
 });
 
@@ -179,7 +179,8 @@ console.log('='.repeat(60));
 console.log(' CBS Print Service  –  Instalador de Servicio Windows');
 console.log('='.repeat(60));
 console.log(`\nScript del servicio : ${SERVICE_SCRIPT}`);
-console.log(`Nombre del servicio : ${SERVICE_NAME}`);
+console.log(`Nombre visible      : ${SERVICE_NAME}`);
+console.log(`Nombre interno      : ${SERVICE_KEY}`);
 console.log('\nInstalando...\n');
 
 svc.install();

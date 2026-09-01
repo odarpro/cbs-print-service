@@ -108,12 +108,13 @@ Filename: "{cmd}"; Parameters: "/C """"{app}\scripts\stop-alert-watcher.bat"" >>
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando watcher de alertas... >> ""{app}\uninstall.log"" & schtasks.exe /End /TN ""\CBS Print Service\CBSAlertWatcher"" >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSAlertWatcher"" /F >> ""{app}\uninstall.log"" 2>&1"; \
   Flags: runhidden; RunOnceId: "UninstallAlertWatcher"
 
+; node-windows registra la clave del servicio a partir del id como cbsprintservice.exe.
 ; Detener servicio
-Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Deteniendo servicio... >> ""{app}\uninstall.log"" & sc stop CBSPrintService >> ""{app}\uninstall.log"" 2>&1"; \
+Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Deteniendo servicio... >> ""{app}\uninstall.log"" & sc stop cbsprintservice.exe >> ""{app}\uninstall.log"" 2>&1"; \
   Flags: runhidden; RunOnceId: "UninstallStop"
 
 ; Eliminar servicio
-Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando servicio... >> ""{app}\uninstall.log"" & sc delete CBSPrintService >> ""{app}\uninstall.log"" 2>&1"; \
+Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando servicio... >> ""{app}\uninstall.log"" & sc delete cbsprintservice.exe >> ""{app}\uninstall.log"" 2>&1"; \
   Flags: runhidden; RunOnceId: "UninstallDelete"
 
 ; Log fin
@@ -130,8 +131,8 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\RunOnce"; \
   Flags: createvalueifdoesntexist deletevalue
 
 [Icons]
-Name: "{group}\Iniciar Servicio";     Filename: "net";    Parameters: "start CBSPrintService"; Flags: runminimized
-Name: "{group}\Detener Servicio";     Filename: "net";    Parameters: "stop CBSPrintService";  Flags: runminimized
+Name: "{group}\Iniciar Servicio";     Filename: "net";    Parameters: "start cbsprintservice.exe"; Flags: runminimized
+Name: "{group}\Detener Servicio";     Filename: "net";    Parameters: "stop cbsprintservice.exe";  Flags: runminimized
 Name: "{group}\Estado del Servicio";  Filename: "{app}\status.bat";                            Flags: runminimized
 Name: "{group}\Diagnóstico";          Filename: "cmd.exe"; \
   Parameters: "/K node ""{app}\scripts\diagnostico.js""";                                       Flags: runminimized

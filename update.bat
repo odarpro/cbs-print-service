@@ -23,10 +23,11 @@ if %errorLevel% neq 0 (
 )
 
 set INSTALL_DIR=C:\CBS\PrintService
+set SERVICE_KEY=cbsprintservice.exe
 set SOURCE_DIR=%~dp0
 
 echo [1/5] Deteniendo servicio...
-sc stop CBSPrintService >nul 2>&1
+sc stop %SERVICE_KEY% >nul 2>&1
 timeout /t 3 /nobreak >nul
 
 echo [2/5] Actualizando archivos (config.json NO sera modificado)...
@@ -67,7 +68,7 @@ if %errorLevel% neq 0 (
 )
 
 echo [6/6] Reiniciando servicio...
-sc start CBSPrintService >nul 2>&1
+sc start %SERVICE_KEY% >nul 2>&1
 if %errorLevel% equ 0 (
     echo        Servicio reiniciado.  [OK]
 ) else (
