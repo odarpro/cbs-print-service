@@ -5,7 +5,7 @@
 :: REQUIERE ejecutar como Administrador.
 :: =============================================================================
 
-setlocal
+setlocal enabledelayedexpansion
 
 :: Archivo de log del desinstalador
 set UNINSTALL_LOG=%TEMP%\cbs_uninstall.log
@@ -63,7 +63,7 @@ if exist "%INSTALL_DIR%\scripts\uninstall-service.js" (
     ) else (
         node scripts\uninstall-service.js > "%SVC_UNINSTALL_LOG%" 2>&1
     )
-    if %errorLevel% neq 0 (
+    if !errorLevel! neq 0 (
         echo [WARN] El script node devolvio error. Se aplicara fallback. >> "%UNINSTALL_LOG%"
         echo Contenido de %SVC_UNINSTALL_LOG%: >> "%UNINSTALL_LOG%"
         type "%SVC_UNINSTALL_LOG%" >> "%UNINSTALL_LOG%"
@@ -83,7 +83,7 @@ if exist "%INSTALL_DIR%\scripts\stop-alert-watcher.bat" (
 )
 schtasks.exe /End /TN "\CBS Print Service\CBSAlertWatcher" >> "%UNINSTALL_LOG%" 2>&1
 schtasks.exe /Delete /TN "\CBS Print Service\CBSAlertWatcher" /F >> "%UNINSTALL_LOG%" 2>&1
-if %errorLevel% neq 0 (
+if !errorLevel! neq 0 (
     echo [%DATE% %TIME%] [ERROR] No se pudo eliminar el watcher de alertas. >> "%UNINSTALL_LOG%"
 ) else (
     echo [%DATE% %TIME%] Watcher de alertas eliminado. >> "%UNINSTALL_LOG%"
@@ -94,12 +94,15 @@ if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CBSAlertWatche
     echo Bat legacy de Startup eliminado. >> "%UNINSTALL_LOG%"
 )
 
-:: ── 2) Fallback: detener y eliminar servicio usando PowerShell/sc ────────────
+:: ── 2) Fallback: detener y eliminar servicio directamente con sc.exe ────────
 echo.
 echo [2/3] Asegurando que el servicio esté detenido y eliminado (fallback)...
 echo Deteniendo servicio (si existe) >> "%UNINSTALL_LOG%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Try { Stop-Service -Name '%SERVICE_KEY%' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; } Catch { }"
-sc.exe delete "%SERVICE_KEY%" >> "%UNINSTALL_LOG%" 2>&1 || echo sc.exe delete devolvio error >> "%UNINSTALL_LOG%"
+sc.exe stop "%SERVICE_KEY%" >> "%UNINSTALL_LOG%" 2>&1
+call :wait_service_stopped
+taskkill /F /IM cbsprintservice.exe >> "%UNINSTALL_LOG%" 2>&1
+sc.exe delete "%SERVICE_KEY%" >> "%UNINSTALL_LOG%" 2>&1
+call :wait_service_removed
 
 :: Comprobar si sigue existiendo
 sc query "%SERVICE_KEY%" > "%TEMP%\cbs_svc_query.txt" 2>&1
@@ -134,3 +137,40 @@ echo ============================================================
 echo.
 type "%UNINSTALL_LOG%" | more
 pause
+exit /b 0
+
+:: -----------------------------------------------------------------------------
+:: Subrutinas: espera del estado del servicio en el SCM
+:: -----------------------------------------------------------------------------
+
+:wait_service_stopped
+set /a _tries = 0
+:wait_service_stopped_loop
+sc query "%SERVICE_KEY%" | find /I "STOPPED" >nul 2>&1
+if not errorlevel 1 (
+    echo Servicio detenido. >> "%UNINSTALL_LOG%"
+    goto :eof
+)
+set /a _tries += 1
+if %_tries% geq 15 (
+    echo [AVISO] El servicio no se detuvo a tiempo. Continuando... >> "%UNINSTALL_LOG%"
+    goto :eof
+)
+timeout /t 2 /nobreak >nul 2>&1
+goto :wait_service_stopped_loop
+
+:wait_service_removed
+set /a _tries = 0
+:wait_service_removed_loop
+sc query "%SERVICE_KEY%" >nul 2>&1
+if errorlevel 1 (
+    echo Servicio eliminado del SCM. >> "%UNINSTALL_LOG%"
+    goto :eof
+)
+set /a _tries += 1
+if %_tries% geq 15 (
+    echo [AVISO] El servicio aun figura en el SCM tras la espera. >> "%UNINSTALL_LOG%"
+    goto :eof
+)
+timeout /t 2 /nobreak >nul 2>&1
+goto :wait_service_removed_loop

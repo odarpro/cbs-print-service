@@ -4,64 +4,80 @@
 // uninstall-service.js  –  CBS Print Service
 // =============================================================================
 
-const path = require('path');
-const Service = require('node-windows').Service;
+const { execFile } = require('child_process');
 
-const SERVICE_NAME = 'CBSPrintService';
 const SERVICE_ID = 'cbsprintservice';
 const SERVICE_KEY = SERVICE_ID;
-const SERVICE_SCRIPT = path.join(__dirname, '..', 'src', 'index.js');
 const TIMEOUT_MS = 30000;
 
-let uninstallDone = false;
+function runSc(args) {
+  return new Promise((resolve) => {
+    execFile('sc.exe', args, { windowsHide: true }, (error, stdout, stderr) => {
+      resolve({
+        code: error ? (error.code || 1) : 0,
+        output: `${stdout || ''}${stderr || ''}`
+      });
+    });
+  });
+}
 
-const timeout = setTimeout(() => {
-  if (!uninstallDone) {
-    console.error(`\n[ERROR] Tiempo de espera agotado (${TIMEOUT_MS / 1000}s) al desinstalar el servicio.`);
-    console.error(`       Ejecute como Administrador: sc delete ${SERVICE_KEY}`);
-    process.exit(1);
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function killWrapper() {
+  return new Promise((resolve) => {
+    execFile('taskkill.exe', ['/F', '/IM', 'cbsprintservice.exe'], { windowsHide: true }, () => resolve());
+  });
+}
+
+async function serviceExists() {
+  return (await runSc(['query', SERVICE_KEY])).code === 0;
+}
+
+async function waitForRemoval() {
+  const deadline = Date.now() + TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (!(await serviceExists())) return true;
+    await delay(1000);
   }
-}, TIMEOUT_MS);
+  return false;
+}
 
-const svc = new Service({
-    name: SERVICE_NAME,
-    id: SERVICE_ID,
-    script: SERVICE_SCRIPT
+async function uninstall() {
+  console.log('='.repeat(60));
+  console.log(' CBS Print Service  –  Desinstalador');
+  console.log('='.repeat(60));
+
+  if (!(await serviceExists())) {
+    console.log(`[INFO] El servicio "${SERVICE_KEY}" ya no se encuentra instalado.`);
+    return;
+  }
+
+  console.log(`\nDeteniendo servicio "${SERVICE_KEY}"...`);
+  await runSc(['stop', SERVICE_KEY]);
+  await killWrapper();
+
+  console.log(`Eliminando servicio "${SERVICE_KEY}"...`);
+  let deleted = await runSc(['delete', SERVICE_KEY]);
+  if (deleted.code !== 0 && deleted.code !== 1072) {
+    throw new Error(deleted.output.trim() || 'sc delete devolvió un error.');
+  }
+
+  if (!(await waitForRemoval())) {
+    // Reintento agresivo por si el proceso wrapper bloquea la eliminación.
+    await killWrapper();
+    deleted = await runSc(['delete', SERVICE_KEY]);
+    if (!(await waitForRemoval())) {
+      throw new Error(`El servicio "${SERVICE_KEY}" sigue registrado tras ${TIMEOUT_MS / 1000}s.`);
+    }
+  }
+
+  console.log(`[OK] Servicio "${SERVICE_KEY}" desinstalado correctamente.`);
+}
+
+uninstall().catch((error) => {
+  console.error(`[ERROR] ${error.message}`);
+  console.error(`        Ejecute como Administrador: sc delete ${SERVICE_KEY}`);
+  process.exit(1);
 });
-
-// -----------------------------------------------------------------------------
-// Eventos
-// -----------------------------------------------------------------------------
-
-svc.on('uninstall', () => {
-    uninstallDone = true;
-    console.log(`\n[OK] Servicio "${SERVICE_NAME}" desinstalado correctamente.`);
-    clearTimeout(timeout);
-    setTimeout(() => process.exit(0), 500);
-});
-
-svc.on('alreadyuninstalled', () => {
-    uninstallDone = true;
-    console.log(`[INFO] El servicio "${SERVICE_NAME}" ya no se encuentra instalado.`);
-    clearTimeout(timeout);
-    setTimeout(() => process.exit(0), 500);
-});
-
-svc.on('error', (err) => {
-    console.error('[ERROR]');
-    console.error(err);
-    clearTimeout(timeout);
-    setTimeout(() => process.exit(1), 500);
-});
-
-// -----------------------------------------------------------------------------
-// Desinstalar
-// -----------------------------------------------------------------------------
-
-console.log('='.repeat(60));
-console.log(' CBS Print Service  –  Desinstalador');
-console.log('='.repeat(60));
-
-console.log(`\nDesinstalando servicio "${SERVICE_NAME}" (${SERVICE_KEY})...\n`);
-
-svc.uninstall();
