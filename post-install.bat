@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-set SERVICE_KEY=cbsprintservice.exe
+set SERVICE_KEY=cbsprintservice
 
 REM Detectar qué Node.js usar (system PATH o bundled portable)
 for /f "delims=" %%i in ('node scripts\find-node.cmd 2^>nul') do set NODE_EXE=%%i

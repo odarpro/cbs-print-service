@@ -29,7 +29,7 @@ if %errorLevel% neq 0 (
 )
 
 set INSTALL_DIR=C:\CBS\PrintService
-set SERVICE_KEY=cbsprintservice.exe
+set SERVICE_KEY=cbsprintservice
 
 echo Se eliminara el servicio y los archivos en:
 echo   %INSTALL_DIR%

@@ -6,7 +6,7 @@
 :: =============================================================================
 
 setlocal
-set SERVICE_KEY=cbsprintservice.exe
+set SERVICE_KEY=cbsprintservice
 
 title CBS Print Service - Estado
 

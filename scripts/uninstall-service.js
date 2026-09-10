@@ -9,7 +9,7 @@ const Service = require('node-windows').Service;
 
 const SERVICE_NAME = 'CBSPrintService';
 const SERVICE_ID = 'cbsprintservice';
-const SERVICE_KEY = `${SERVICE_ID}.exe`;
+const SERVICE_KEY = SERVICE_ID;
 const SERVICE_SCRIPT = path.join(__dirname, '..', 'src', 'index.js');
 const TIMEOUT_MS = 30000;
 

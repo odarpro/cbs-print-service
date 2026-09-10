@@ -23,7 +23,7 @@ if %errorLevel% neq 0 (
 )
 
 set INSTALL_DIR=C:\CBS\PrintService
-set SERVICE_KEY=cbsprintservice.exe
+set SERVICE_KEY=cbsprintservice
 set SOURCE_DIR=%~dp0
 
 echo [1/5] Deteniendo servicio...
