@@ -9,3 +9,4 @@ El servicio depende de tres capas, cada una con su propio riesgo:
    para invocar C# (System.Drawing.Printing). Ambas opciones siguen sin depender de cmd.exe.
 
 En resumen: el servicio es estable para años. El único punto frágil es la dependencia nativa de terceros, pero tienes rutas de escape claras.
+

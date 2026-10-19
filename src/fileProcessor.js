@@ -9,6 +9,8 @@
 //   4. Invoca printer.printFile() — sin procesos externos.
 //   5. Aplica política de reintentos ante error.
 //   6. Mueve o elimina el archivo según configuración.
+//   7. Todo archivo trasladado a errorFolder genera su entrada de log (ERROR)
+//      en el log global del servicio con el motivo y el detalle del fallo.
 // =============================================================================
 
 const fs             = require('fs');
@@ -194,7 +196,12 @@ class FileProcessor {
         const parsedParams = parsed && parsed.params ? parsed.params : null;
         notifier.notifyInvalidFile(fileName, validation.errors, parsedParams);
 
-        this._moveToError(filePath, `Parámetros inválidos: ${validation.errors.join('; ')}`);
+        this._moveToError(filePath, `Parámetros inválidos: ${validation.errors.join('; ')}`, {
+          stage:    'validacion',
+          docType,
+          intentos: 0,
+          detalle:  validation.errors
+        });
         return;
       }
     }
@@ -224,7 +231,11 @@ class FileProcessor {
       log.warn('Archivo vacío, moviendo a errores', { filePath: contentFilePath });
       const parsedParams = parsed && parsed.params ? parsed.params : null;
       notifier.notifyPrintError(fileName, 'Archivo vacío', parsedParams);
-      this._moveToError(filePath, 'Archivo vacío');
+      this._moveToError(filePath, 'Archivo vacío', {
+        stage:    'lectura',
+        docType,
+        intentos: 0
+      });
       return;
     }
 
@@ -241,7 +252,11 @@ class FileProcessor {
       log.error('No hay impresora configurada para el tipo de documento', { docType });
       const parsedParams = parsed && parsed.params ? parsed.params : null;
       notifier.notifyPrintError(fileName, 'Sin impresora configurada', parsedParams);
-      this._moveToError(filePath, 'Sin impresora configurada');
+      this._moveToError(filePath, 'Sin impresora configurada', {
+        stage:    'configuracion',
+        docType,
+        intentos: 0
+      });
       return;
     }
 
@@ -306,6 +321,7 @@ class FileProcessor {
       ? cfg.retryIntervalMs
       : 5000;
     let   lastError  = null;
+    const attemptErrors = [];
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -343,6 +359,7 @@ class FileProcessor {
 
       } catch (err) {
         lastError = err;
+        attemptErrors.push(`Intento ${attempt}/${maxAttempts}: ${err.message}`);
         log.warn(`Intento ${attempt}/${maxAttempts} fallido`, {
           fileName,
           error: err.message
@@ -355,16 +372,33 @@ class FileProcessor {
     }
 
     // ── Agotados los reintentos ──────────────────────────────────────────
+    const finalError = lastError ? lastError.message : 'Error desconocido';
+
     log.error('Archivo no pudo imprimirse tras todos los reintentos', {
       fileName,
-      error: lastError ? lastError.message : 'desconocido',
-      retryCount
+      docType,
+      impresora:     resolvedPrinterName,
+      modo:          resolvedPrintMethod,
+      intentos:      maxAttempts,
+      reintentos:    retryCount,
+      intervaloMs:   retryMs,
+      error:         finalError,
+      detalleIntentos: attemptErrors
     });
 
     const parsedParams = parsed && parsed.params ? parsed.params : null;
-    notifier.notifyPrintError(fileName, lastError ? lastError.message : 'Error desconocido', parsedParams);
+    notifier.notifyPrintError(fileName, finalError, parsedParams);
 
-    this._moveToError(filePath, lastError ? lastError.message : 'Error desconocido');
+    this._moveToError(filePath, finalError, {
+      stage:            'impresion',
+      docType,
+      impresora:        resolvedPrinterName,
+      modo:             resolvedPrintMethod,
+      intentos:         maxAttempts,
+      reintentos:       retryCount,
+      ultimoError:      finalError,
+      detalleIntentos:  attemptErrors
+    });
   }
 
   // ── Post-proceso ─────────────────────────────────────────────────────────
@@ -383,15 +417,36 @@ class FileProcessor {
     }
   }
 
-  _moveToError(filePath, reason) {
-    const log = logger.get();
+  /**
+   * Traslada un archivo a errorFolder y registra su entrada en el log global.
+   * Se genera SIEMPRE una línea ERROR con el motivo y el detalle del fallo,
+   * tanto si el traslado se completa como si falla.
+   *
+   * @param {string} filePath
+   * @param {string} reason   Motivo legible del fallo
+   * @param {object} [details] Detalle adicional (etapa, intentos, impresora…)
+   * @returns {string|null} Ruta destino o null si el traslado falló
+   */
+  _moveToError(filePath, reason, details = {}) {
+    const log      = logger.get();
+    const fileName = path.basename(filePath);
+    const base     = { ...details, fileName, motivo: reason };
+
     try {
       const dest = moveFile(filePath, this.config.errorFolder);
-      log.error('Archivo movido a carpeta de errores', { dest, reason });
+      log.error('Archivo trasladado a carpeta de errores', {
+        ...base,
+        dest,
+        errorFolder: this.config.errorFolder
+      });
+      return dest;
     } catch (e) {
       log.error('No se pudo mover archivo a carpeta de errores', {
-        filePath, reason, moveError: e.message
+        ...base,
+        filePath,
+        moveError: e.message
       });
+      return null;
     }
   }
 

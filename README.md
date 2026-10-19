@@ -32,7 +32,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_3.2.1_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.2.2_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -469,3 +469,4 @@ CBS Print Service (Session 0)
 | 3.1.0 | Ago 2026 | El modo **GDI** (`43I`) pasa de ESC/POS a **GDI nativo de Windows**: `gdi32.dll` vía FFI (`koffi`) con `CreateDCW`/`CreateFontW`/`TextOutW` a través del driver de la impresora. Fuente TrueType real, tamaño en puntos, negrita y word-wrap. Sin procesos externos (Session 0-safe). Se agrega dependencia `koffi` y se reescribe `gdiPrinter.js`. **Anti-bloqueo**: la secuencia GDI se ejecuta en un worker thread (`gdiWorker.js`) con timeout configurable (`gdiTimeoutMs`, default 60000) y guard de puerto `PORTPROMPT` (falla rápido con error claro en vez de colgar el servicio); la cola FIFO y el vigilante nunca se congelan. |
 | 3.2.0 | Ago 2026 | Retención configurable para Histórico, Errores y Alertas. El vigilante Java procesa alertas una por una, las muestra centradas y en primer plano, y su desinstalación finaliza procesos Java asociados. |
 | 3.2.1 | Sep 2026 | Se corrige el JSON de configuración de ejemplo y el control del servicio Windows: `sc` y `net` ahora usan el identificador registrado `cbsprintservice`, no el ejecutable wrapper `cbsprintservice.exe`. |
+| 3.2.2 | Oct 2026 | Todo archivo que termine en la carpeta de errores genera su registro en el log global: al agotar los reintentos (y también en archivo vacío, parámetros inválidos o sin impresora) se escribe una entrada `ERROR` con motivo, etapa, impresora, intentos y el detalle de cada intento. |

@@ -5,9 +5,9 @@
   "logFolder":           "D:\\Impresiones\\Logs",
   "logLevel":            "info",
   "logRetentionDays":    30,
-  "historyRetentionDays": 30,
-  "errorRetentionDays":  90,
-  "alertRetentionDays":  7,
+  "historyRetentionDays": 3,
+  "errorRetentionDays":  15,
+  "alertRetentionDays":  1,
 
   "printMethod":         "DIRECT",
 
@@ -37,7 +37,7 @@
   "fileAction":          "MOVE",
   "pollingIntervalMs":   1000,
   "fileStabilizeMs":     500,
-  "retryCount":          3,
+  "retryCount":          0,
   "retryIntervalMs":     5000,
 
   "toastEnabled":        true,
