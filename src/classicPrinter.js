@@ -19,6 +19,7 @@ const path           = require('path');
 const os             = require('os');
 const { execFile }   = require('child_process');
 const logger         = require('./logger');
+const jobTracker     = require('./jobTracker');
 
 const PS_SCRIPT_REL  = path.join('scripts', 'print-classic.ps1');
 
@@ -65,6 +66,7 @@ function buildClassicArgs(opts) {
     maxCharsPerLine = 40,
     fileEncoding  = 'latin1',
     copies        = 1,
+    documentName  = '',
   } = opts;
 
   const cleanFont = String(fontName || 'Courier New').replace(/_/g, ' ') || 'Courier New';
@@ -80,6 +82,10 @@ function buildClassicArgs(opts) {
     '-Copies', String(copies && copies > 0 ? copies : 1),
   ];
 
+  if (documentName) {
+    args.push('-DocumentName', String(documentName));
+  }
+
   if (bold) args.push('-Bold');
 
   return args;
@@ -91,36 +97,58 @@ function buildClassicArgs(opts) {
  * @param {number} timeoutMs
  * @returns {Promise<string>}
  */
-function runPowerShell(args, timeoutMs = 60000) {
+function runPowerShell(args, timeoutMs = 60000, signal = null) {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let timeout = null;
+    let abortHandler = null;
+
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      if (signal && abortHandler) {
+        try { signal.removeEventListener('abort', abortHandler); } catch {}
+      }
+      fn(value);
+    };
+
+    const killTree = () => {
+      if (child.pid) {
+        execFile('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+      }
+    };
+
     const child = execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass'].concat(args),
       { windowsHide: true, maxBuffer: 1024 * 1024 },
       (err, stdout, stderr) => {
         if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
         if (err) {
           const detail = String(stderr || stdout || err.message).trim();
-          reject(new Error(`Modo 43C (GDI+ VB): ${detail || err.message}`));
+          settle(reject, new Error(`Modo 43C (GDI+ VB): ${detail || err.message}`));
         } else {
-          resolve(stdout);
+          settle(resolve, stdout);
         }
       }
     );
 
     // PrintDocument puede quedar bloqueado dentro de un driver. Finalizamos el
     // árbol completo y liberamos la cola sin depender de que PowerShell cierre.
-    const timeout = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      if (child.pid) {
-        execFile('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
-      }
-      reject(new Error(`Modo 43C (GDI+ VB): tiempo máximo de ${timeoutMs} ms excedido.`));
+    timeout = setTimeout(() => {
+      killTree();
+      settle(reject, new Error(`Modo 43C (GDI+ VB): tiempo máximo de ${timeoutMs} ms excedido.`));
     }, timeoutMs);
+
+    if (signal) {
+      abortHandler = () => {
+        killTree();
+        settle(reject, new jobTracker.JobAbortedError());
+      };
+      if (signal.aborted) abortHandler();
+      else signal.addEventListener('abort', abortHandler, { once: true });
+    }
   });
 }
 
@@ -146,6 +174,9 @@ async function printClassic(content, opts) {
     docTitle = 'Recibo',
     fileEncoding = 'latin1',
     timeoutMs = 60000,
+    signal = null,
+    onJobStarted = null,
+    documentName: providedDocumentName
   } = opts;
 
   const script = findPsScript();
@@ -153,16 +184,23 @@ async function printClassic(content, opts) {
     throw new Error('No se encontró scripts/print-classic.ps1 (requerido para el modo 43C).');
   }
 
+  const documentName = providedDocumentName || jobTracker.makeDocumentName(docTitle);
+  const jobKey = jobTracker.makeJobKey(documentName);
   const tmpDir  = process.env.TEMP || process.env.TMP || os.tmpdir();
   const tmpFile = path.join(tmpDir, `cbs_classic_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.txt`);
 
   try {
     fs.writeFileSync(tmpFile, content, { encoding: fileEncoding });
 
-    const args = buildClassicArgs({ script, filePath: tmpFile, ...opts });
+    const args = buildClassicArgs({ script, filePath: tmpFile, ...opts, documentName });
+
+    if (typeof onJobStarted === 'function') {
+      onJobStarted({ printerName, documentName: jobKey, jobId: null });
+    }
 
     log.debug('Iniciando impresión modo CLASSIC (GDI+ VB)', {
       printerName,
+      documentName,
       fontName:  opts.fontName,
       fontSize:  opts.fontSize,
       bold:      opts.bold,
@@ -170,9 +208,44 @@ async function printClassic(content, opts) {
       copies:    opts.copies,
     });
 
-    await runPowerShell(args, timeoutMs);
+    await runPowerShell(args, timeoutMs, signal);
 
-    log.info('Impresión CLASSIC completada', { printerName, docTitle });
+    // El job ya está en el spooler: esperar a que salga de la cola. Si la
+    // impresora está apagada o el driver se cuelga, se cancela al vencer.
+    const queueResult = await jobTracker.waitForJobsToClear(printerName, jobKey, {
+      timeoutMs,
+      signal,
+      onSeen: (jobs) => {
+        if (typeof onJobStarted === 'function') {
+          onJobStarted({
+            printerName,
+            documentName: jobKey,
+            jobId: jobs && jobs[0] ? jobs[0].id : null
+          });
+        }
+      }
+    });
+
+    if (queueResult.outcome === 'timeout' || queueResult.outcome === 'blocked') {
+      const detail = queueResult.outcome === 'blocked'
+        ? 'estado de error/offline'
+        : `más de ${timeoutMs} ms sin salir de la cola`;
+      throw new Error(
+        `Modo 43C (GDI+ VB): el trabajo quedó atascado (${detail}); ` +
+        `se canceló para no bloquear la impresora.`
+      );
+    }
+
+    log.info('Impresión CLASSIC completada', {
+      printerName,
+      docTitle,
+      documentName,
+      outcome: queueResult.outcome
+    });
+  } catch (err) {
+    // Ante cualquier fallo, no dejar trabajos propios en la cola.
+    jobTracker.deleteMatchingJobs(printerName, jobKey);
+    throw err;
   } finally {
     try { fs.unlinkSync(tmpFile); } catch {}
   }

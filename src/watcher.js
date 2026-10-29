@@ -29,15 +29,17 @@ class FolderWatcher {
 
   /**
    * Inicia el monitoreo de la carpeta configurada.
-   * Crea la carpeta si no existe.
+   * Crea la carpeta si no existe (con reintentos para discos que tardan en
+   * montarse al arrancar Windows).
    */
-  start() {
+  async start() {
     const log        = logger.get();
     const watchFolder = this.config.watchFolder;
 
     // Crear carpetas necesarias si no existen
-    this._ensureFolders();
+    await this._ensureFoldersWithRetry();
     this._cleanExpiredFiles();
+    this._deletePendingFiles();
     this._retentionTimer = setInterval(() => this._cleanExpiredFiles(), RETENTION_CHECK_INTERVAL_MS);
 
     log.info('Iniciando monitoreo de carpeta', { watchFolder });
@@ -47,7 +49,9 @@ class FolderWatcher {
     this._watcher = chokidar.watch(watchFolder, {
       ignored:        /(^|[/\\])\..|(Historico|Errores|Logs)/i,
       persistent:     true,
-      ignoreInitial:  false,
+      // Los archivos previos ya se resolvieron en _deletePendingFiles();
+      // no se deben reprocesar al arrancar.
+      ignoreInitial:  true,
       depth:          0,
       interval:       pollInterval,
       awaitWriteFinish: {
@@ -66,6 +70,9 @@ class FolderWatcher {
    * Detiene el monitoreo (llamado al detener el servicio).
    */
   async stop() {
+    // No aceptar archivos nuevos; los encolados los gestiona index.js.
+    this.processor.stopAccepting();
+
     if (this._retentionTimer) {
       clearInterval(this._retentionTimer);
       this._retentionTimer = null;
@@ -92,6 +99,32 @@ class FolderWatcher {
     this.processor.enqueue(filePath);
   }
 
+  async _ensureFoldersWithRetry(attempts = 10, delayMs = 3000) {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        this._ensureFolders();
+        return;
+      } catch (err) {
+        lastError = err;
+        logger.get().warn('No se pudieron preparar las carpetas; reintentando', {
+          intento: attempt,
+          intentos: attempts,
+          error: err.message
+        });
+        if (attempt < attempts) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    throw new Error(
+      `No se pudieron crear/acceder las carpetas de trabajo tras ${attempts} intentos: ` +
+      `${lastError ? lastError.message : 'error desconocido'}`
+    );
+  }
+
   _ensureFolders() {
     const cfg = this.config;
     for (const folderKey of ['watchFolder', 'historyFolder', 'errorFolder', 'logFolder']) {
@@ -104,11 +137,78 @@ class FolderWatcher {
 
     // Crear carpeta de alertas (fallback para notificaciones)
     if (cfg.logFolder) {
-      const alertDir = require('path').join(require('path').dirname(cfg.logFolder), 'Alertas');
+      const alertDir = path.join(path.dirname(cfg.logFolder), 'Alertas');
       if (!fs.existsSync(alertDir)) {
         fs.mkdirSync(alertDir, { recursive: true });
         logger.get().info(`Carpeta creada: ${alertDir}`);
       }
+    }
+  }
+
+  /**
+   * Elimina los .txt pendientes (prefijos Rec y Val) de watchFolder al arrancar.
+   * Evita reimprimir documentos viejos o dejar trabajos huérfanos en el spooler.
+   * No toca Histórico, Errores ni Logs (depth 0).
+   */
+  _deletePendingFiles() {
+    const log = logger.get();
+    const cfg = this.config;
+    const watchFolder = cfg.watchFolder;
+
+    if (cfg.deletePendingOnStartup === false) {
+      log.info('Limpieza de pendientes al arrancar deshabilitada por configuración');
+      return;
+    }
+
+    if (!watchFolder || !fs.existsSync(watchFolder)) {
+      log.warn('No se pueden eliminar pendientes: carpeta de monitoreo inexistente', { watchFolder });
+      return;
+    }
+
+    let deleted = 0;
+    const failed = [];
+    const names = [];
+
+    let entries;
+    try {
+      entries = fs.readdirSync(watchFolder, { withFileTypes: true });
+    } catch (err) {
+      log.warn('No se pudo leer watchFolder para eliminar pendientes', {
+        watchFolder,
+        error: err.message
+      });
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+
+      const base = entry.name.toLowerCase();
+      if (!base.endsWith('.txt')) continue;
+      if (!base.startsWith('rec') && !base.startsWith('val')) continue;
+
+      const filePath = path.join(watchFolder, entry.name);
+      try {
+        fs.unlinkSync(filePath);
+        deleted++;
+        names.push(entry.name);
+      } catch (err) {
+        failed.push({ file: entry.name, error: err.message });
+      }
+    }
+
+    if (deleted > 0) {
+      log.warn('Archivos pendientes eliminados al arrancar', {
+        watchFolder,
+        deleted,
+        archivos: names.slice(0, 50)
+      });
+    } else {
+      log.info('No había archivos pendientes al arrancar', { watchFolder });
+    }
+
+    if (failed.length > 0) {
+      log.warn('Algunos archivos pendientes no se pudieron eliminar', { failed });
     }
   }
 

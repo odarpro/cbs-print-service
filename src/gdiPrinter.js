@@ -22,6 +22,7 @@ const path     = require('path');
 const { execFile } = require('child_process');
 const { Worker }  = require('worker_threads');
 const logger   = require('./logger');
+const jobTracker = require('./jobTracker');
 
 const WORKER_SCRIPT  = path.join(__dirname, 'gdiWorker.js');
 const DEFAULT_TIMEOUT_MS = 60000;
@@ -107,7 +108,7 @@ function isPortPromptPort(port) {
  * @param {number} timeoutMs
  * @returns {Promise<void>}
  */
-function runGdiInWorker(job, timeoutMs) {
+function runGdiInWorker(job, timeoutMs, signal = null) {
   return new Promise((resolve, reject) => {
     if (!fs.existsSync(WORKER_SCRIPT)) {
       return reject(new Error(`Modo GDI real: no se encontró ${WORKER_SCRIPT}.`));
@@ -115,11 +116,15 @@ function runGdiInWorker(job, timeoutMs) {
 
     const worker = new Worker(WORKER_SCRIPT, { workerData: job });
     let done = false;
+    let abortHandler = null;
 
     const finish = (cb, value) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
+      if (signal && abortHandler) {
+        try { signal.removeEventListener('abort', abortHandler); } catch {}
+      }
       cb(value);
     };
 
@@ -129,6 +134,15 @@ function runGdiInWorker(job, timeoutMs) {
       ));
       worker.terminate().catch(() => {});
     }, timeoutMs);
+
+    if (signal) {
+      abortHandler = () => {
+        worker.terminate().catch(() => {});
+        finish(reject, new jobTracker.JobAbortedError());
+      };
+      if (signal.aborted) abortHandler();
+      else signal.addEventListener('abort', abortHandler, { once: true });
+    }
 
     worker.on('message', msg => {
       if (msg && msg.ok) {
@@ -175,11 +189,15 @@ async function printGdi(content, opts = {}) {
     fontSize = 9,
     copies = 1,
     docTitle = 'Recibo',
-    timeoutMs = DEFAULT_TIMEOUT_MS
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal = null
   } = opts;
 
   if (!printerName) {
     throw new Error('Modo GDI real: falta el nombre de la impresora.');
+  }
+  if (signal && signal.aborted) {
+    throw new jobTracker.JobAbortedError();
   }
 
   const cleanFont = String(fontName || 'Courier New').replace(/_/g, ' ') || 'Courier New';
@@ -192,6 +210,9 @@ async function printGdi(content, opts = {}) {
   // Guard anti-bloqueo: puertos PORTPROMPT de impresoras virtuales piden
   // nombre de archivo al imprimir y desde Session 0 colgarían el driver.
   const port = await getPrinterPort(printerName);
+  if (signal && signal.aborted) {
+    throw new jobTracker.JobAbortedError();
+  }
   if (isPortPromptPort(port)) {
     throw new Error(
       `Modo GDI real: la impresora "${printerName}" usa puerto PORTPROMPT ` +
@@ -220,7 +241,7 @@ async function printGdi(content, opts = {}) {
     bold: !!bold,
     copies: nCopies,
     docTitle
-  }, nTimeout);
+  }, nTimeout, signal);
 
   logger.get().info('Impresión GDI real completada', {
     printerName,

@@ -1,12 +1,16 @@
 {
   "name": "cbs-print-service",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "description": "Servicio de impresion directa para impresoras matriciales - CBS",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "install-service": "node scripts/install-service.js",
     "uninstall-service": "node scripts/uninstall-service.js",
+    "install-boot-guard": "node scripts/install-boot-guard.js",
+    "uninstall-boot-guard": "node scripts/install-boot-guard.js /uninstall",
+    "clean-queue": "node scripts/limpiar-cola.js",
+    "diagnostics": "node scripts/diagnostico.js",
     "test": "node --test tests/*.test.js",
     "test:watch": "node --test --watch tests/*.test.js"
   },

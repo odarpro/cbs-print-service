@@ -19,6 +19,7 @@ const logger         = require('./logger');
 const printer        = require('./printer');
 const filenameParser = require('./filenameParser');
 const notifier       = require('./notifier');
+const jobTracker     = require('./jobTracker');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,7 +31,7 @@ const notifier       = require('./notifier');
  * intentar leerlo (evita lecturas parciales).
  * Timeout máximo de 30 segundos para evitar bloqueos indefinidos.
  */
-async function waitForFileStable(filePath, ms = 500) {
+async function waitForFileStable(filePath, ms = 500, signal = null) {
   let prevSize = -1;
   let stable   = false;
   let emptyCount = 0;
@@ -38,11 +39,12 @@ async function waitForFileStable(filePath, ms = 500) {
   const MAX_WAIT_MS = 30000;
 
   while (!stable) {
+    if (signal && signal.aborted) return;
     if (Date.now() - start > MAX_WAIT_MS) {
       logger.get().warn('Tiempo máximo de estabilización excedido, procesando archivo', { filePath });
       return;
     }
-    await sleep(ms);
+    await sleep(ms, signal);
     try {
       const { size } = fs.statSync(filePath);
       if (size === 0) {
@@ -60,8 +62,35 @@ async function waitForFileStable(filePath, ms = 500) {
   }
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function sleep(ms, signal = null) {
+  return new Promise(resolve => {
+    if (signal && signal.aborted) return resolve();
+
+    let timer = null;
+    const onAbort = () => {
+      if (timer) clearTimeout(timer);
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      if (signal) {
+        try { signal.removeEventListener('abort', onAbort); } catch {}
+      }
+    };
+
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+function isAbortedError(err) {
+  return !!err && err.code === 'CBS_JOB_ABORTED';
 }
 
 /**
@@ -134,6 +163,9 @@ class FileProcessor {
     this.config = config;
     this._queue = [];        // cola FIFO
     this._busy  = false;     // bandera de procesamiento en curso
+    this._accepting = true;  // false tras iniciar el apagado
+    this._stopping  = false; // true cuando se cancela el trabajo activo
+    this._activeJob = null;  // { controller, filePath, documentName, jobId, printerName, startedAt }
   }
 
   /**
@@ -143,35 +175,142 @@ class FileProcessor {
    */
   enqueue(filePath) {
     const log = logger.get();
+    if (!this._accepting) {
+      log.warn('Archivo ignorado: el servicio está finalizando', { filePath });
+      return false;
+    }
     log.info('Archivo encolado', { filePath });
     this._queue.push(filePath);
     this._processNext();
+    return true;
+  }
+
+  /**
+   * Deja de aceptar archivos nuevos. Los ya encolados se siguen procesando.
+   */
+  stopAccepting() {
+    if (!this._accepting) return;
+    this._accepting = false;
+    logger.get().info('El procesador dejó de aceptar archivos nuevos', {
+      pendientes: this._queue.length,
+      ocupado: this._busy
+    });
+  }
+
+  /**
+   * Espera a que la cola y el trabajo activo terminen, sin cancelarlos.
+   * @param {number} timeoutMs
+   * @returns {Promise<boolean>} true si quedó vacío
+   */
+  async drain(timeoutMs = 10000) {
+    const start = Date.now();
+    while (this._busy || this._queue.length > 0) {
+      if (Date.now() - start >= timeoutMs) return false;
+      await sleep(100);
+    }
+    return true;
+  }
+
+  /**
+   * Cancela el trabajo activo: aborta PowerShell/GDI/DIRECT y elimina del
+   * spooler los jobs propios que hayan quedado en la cola.
+   * @param {string} reason
+   * @returns {boolean} true si había un trabajo activo
+   */
+  cancelActiveJob(reason = 'apagado del servicio') {
+    this._stopping = true;
+    const active = this._activeJob;
+    if (!active) {
+      logger.get().warn('No hay trabajo activo que cancelar', { reason });
+      return false;
+    }
+
+    const log = logger.get();
+    log.warn('Cancelando trabajo activo', {
+      reason,
+      filePath: active.filePath,
+      documentName: active.documentName,
+      jobId: active.jobId,
+      printerName: active.printerName
+    });
+
+    try {
+      active.controller.abort(new jobTracker.JobAbortedError(reason));
+    } catch (e) {
+      log.warn('No se pudo abortar el controlador del trabajo', { error: e.message });
+    }
+
+    if (active.printerName && active.documentName) {
+      try {
+        jobTracker.deleteMatchingJobs(active.printerName, active.documentName);
+      } catch (e) {
+        log.warn('No se pudieron eliminar los jobs del spooler', { error: e.message });
+      }
+    }
+
+    return true;
   }
 
   // ── Loop de cola ────────────────────────────────────────────────────────
 
   async _processNext() {
+    if (this._stopping) return;
     if (this._busy || this._queue.length === 0) return;
 
     this._busy = true;
     const filePath = this._queue.shift();
 
+    const controller = new AbortController();
+    this._activeJob = {
+      controller,
+      filePath,
+      documentName: null,
+      jobId: null,
+      printerName: null,
+      startedAt: Date.now()
+    };
+
+    const onJobStarted = (info) => {
+      if (!this._activeJob || this._activeJob.controller !== controller) return;
+      if (!info) return;
+      if (info.printerName) this._activeJob.printerName = info.printerName;
+      if (info.documentName) this._activeJob.documentName = info.documentName;
+      if (info.jobId !== undefined && info.jobId !== null) this._activeJob.jobId = info.jobId;
+    };
+
     try {
-      await this._processFile(filePath);
+      await this._processFile(filePath, { signal: controller.signal, onJobStarted });
     } catch (err) {
-      // Error ya registrado en _processFile; continuamos con el siguiente
-      logger.get().error('Error no esperado en _processNext', { error: err.message });
+      if (isAbortedError(err) || controller.signal.aborted) {
+        logger.get().info('Procesamiento abortado durante el apagado', {
+          filePath,
+          error: err.message
+        });
+      } else {
+        // Error ya registrado en _processFile; continuamos con el siguiente
+        logger.get().error('Error no esperado en _processNext', { error: err.message });
+      }
     } finally {
+      if (this._activeJob && this._activeJob.controller === controller) {
+        this._activeJob = null;
+      }
       this._busy = false;
-      this._processNext();   // procesar el siguiente en la cola
+      if (!this._stopping) {
+        this._processNext();   // procesar el siguiente en la cola
+      }
     }
   }
 
   // ── Procesamiento de un archivo ─────────────────────────────────────────
 
-  async _processFile(filePath) {
+  async _processFile(filePath, ctx = {}) {
+    const { signal = null, onJobStarted = null } = ctx;
     const log  = logger.get();
     const cfg  = this.config;
+
+    if (signal && signal.aborted) {
+      throw new jobTracker.JobAbortedError();
+    }
 
     const fileName = path.basename(filePath);
     const docType  = detectDocType(fileName);
@@ -216,7 +355,11 @@ class FileProcessor {
     const contentFilePath = filePath;
 
     // 2. Esperar a que el archivo de contenido esté completamente escrito
-    await waitForFileStable(contentFilePath, cfg.fileStabilizeMs || 500);
+    await waitForFileStable(contentFilePath, cfg.fileStabilizeMs || 500, signal);
+
+    if (signal && signal.aborted) {
+      throw new jobTracker.JobAbortedError();
+    }
 
     // 3. Verificar archivo y validar contenido
     let content;
@@ -324,6 +467,10 @@ class FileProcessor {
     const attemptErrors = [];
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (signal && signal.aborted) {
+        throw new jobTracker.JobAbortedError();
+      }
+
       try {
         await printer.printFile({
           filePath:       contentFilePath,
@@ -338,7 +485,10 @@ class FileProcessor {
           fontName:       resolvedFontName,
           fontSize:       resolvedFontSize,
           gdiTimeoutMs:   cfg.gdiTimeoutMs,
-          classicTimeoutMs: cfg.classicTimeoutMs
+          classicTimeoutMs: cfg.classicTimeoutMs,
+          directTimeoutMs: cfg.directTimeoutMs,
+          signal,
+          onJobStarted
         });
 
         // ── Éxito ──────────────────────────────────────────────────────
@@ -358,6 +508,14 @@ class FileProcessor {
         return;
 
       } catch (err) {
+        if (isAbortedError(err) || (signal && signal.aborted)) {
+          log.info('Impresión abortada; el archivo queda pendiente', {
+            fileName,
+            intento: attempt
+          });
+          throw new jobTracker.JobAbortedError();
+        }
+
         lastError = err;
         attemptErrors.push(`Intento ${attempt}/${maxAttempts}: ${err.message}`);
         log.warn(`Intento ${attempt}/${maxAttempts} fallido`, {
@@ -366,9 +524,13 @@ class FileProcessor {
         });
 
         if (attempt < maxAttempts) {
-          await sleep(retryMs);
+          await sleep(retryMs, signal);
         }
       }
+    }
+
+    if (signal && signal.aborted) {
+      throw new jobTracker.JobAbortedError();
     }
 
     // ── Agotados los reintentos ──────────────────────────────────────────

@@ -13,6 +13,9 @@
 
   "gdiTimeoutMs":        60000,
   "classicTimeoutMs":    60000,
+  "directTimeoutMs":     60000,
+  "deletePendingOnStartup": true,
+  "cleanupLegacyCbsJobs": true,
 
   "printers": {
     "voucher": {

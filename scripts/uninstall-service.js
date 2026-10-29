@@ -44,10 +44,26 @@ async function waitForRemoval() {
   return false;
 }
 
+async function removeBootGuard() {
+  try {
+    const bootGuard = require('./install-boot-guard');
+    const result = await bootGuard.uninstall();
+    if (result.ok) {
+      console.log('[OK] Tarea de arranque (boot-guard) eliminada.');
+    } else {
+      console.warn(`[WARN] No se pudo eliminar la tarea de arranque: ${result.output || 'error desconocido'}`);
+    }
+  } catch (err) {
+    console.warn(`[WARN] No se pudo eliminar la tarea de arranque: ${err.message}`);
+  }
+}
+
 async function uninstall() {
   console.log('='.repeat(60));
   console.log(' CBS Print Service  –  Desinstalador');
   console.log('='.repeat(60));
+
+  await removeBootGuard();
 
   if (!(await serviceExists())) {
     console.log(`[INFO] El servicio "${SERVICE_KEY}" ya no se encuentra instalado.`);

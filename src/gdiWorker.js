@@ -122,7 +122,7 @@ function printGdiText({ api, koffi, printerName, lines, fontName, fontSize, bold
     for (let c = 1; c <= copies; c++) {
       const docInfo = {
         cbSize: koffi.sizeof('CBS_DOCINFOW'),
-        lpszDocName: `${docTitle} (copia ${c}/${copies})`,
+        lpszDocName: copies > 1 ? `${docTitle} (copia ${c}/${copies})` : docTitle,
         lpszOutput: null,
         lpszDatatype: null,
         fwType: 0

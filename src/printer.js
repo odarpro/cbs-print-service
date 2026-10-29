@@ -24,6 +24,7 @@ const path     = require('path');
 const { execFile } = require('child_process');
 const logger   = require('./logger');
 const gdiPrint = require('./gdiPrinter');
+const jobTracker = require('./jobTracker');
 
 // ---------------------------------------------------------------------------
 // Carga del módulo nativo.
@@ -53,27 +54,49 @@ function getPrinterInfo(partialName) {
   }
 
   const installed = nativePrinter.getPrinters();
-  const needle    = partialName.toUpperCase();
+  const needle    = String(partialName || '').trim().toUpperCase();
 
-  for (const p of installed) {
-    if (p.name.toUpperCase().includes(needle)) {
-      const OFFLINE = 0x00000080;
-      const ERROR   = 0x00000002;
-      const PAPER   = 0x00000020;
-      const st      = p.statusNumber || 0;
-
-      let reason = 'OK';
-      let ok     = true;
-
-      if (st & OFFLINE) { ok = false; reason = 'Impresora offline.'; }
-      else if (st & ERROR)   { ok = false; reason = 'Impresora en estado de error.'; }
-      else if (st & PAPER)   { ok = false; reason = 'Impresora sin papel.'; }
-
-      return { resolvedName: p.name, status: { ok, reason } };
-    }
+  if (!needle) {
+    return { resolvedName: null, status: { ok: false, reason: 'Nombre de impresora vacío.' } };
   }
 
-  return { resolvedName: null, status: { ok: false, reason: `Impresora "${partialName}" no encontrada en el sistema.` } };
+  // Coincidencia exacta primero (evita resolver "Recibos" a "Recibos 2").
+  let printer = installed.find(p => String(p.name || '').toUpperCase() === needle);
+  if (!printer) {
+    printer = installed.find(p => String(p.name || '').toUpperCase().includes(needle));
+  }
+
+  if (!printer) {
+    return { resolvedName: null, status: { ok: false, reason: `Impresora "${partialName}" no encontrada en el sistema.` } };
+  }
+
+  const st = printer.statusNumber || 0;
+
+  // Flags de PRINTER_INFO_2 / PRINTER_STATUS_* que impiden imprimir sin
+  // intervención. No se consideran bloqueantes PRINTING/BUSY/PROCESSING.
+  const BLOCKING = [
+    [0x00000001, 'Impresora en pausa.'],
+    [0x00000002, 'Impresora en estado de error.'],
+    [0x00000004, 'Impresora pendiente de eliminación.'],
+    [0x00000008, 'Atasco de papel.'],
+    [0x00000010, 'Impresora sin papel.'],
+    [0x00000040, 'Problema de papel.'],
+    [0x00000080, 'Impresora offline.'],
+    [0x00000800, 'Bandeja de salida llena.'],
+    [0x00001000, 'Impresora no disponible.'],
+    [0x00040000, 'Impresora sin tóner.'],
+    [0x00100000, 'Requiere intervención del usuario.'],
+    [0x00200000, 'Impresora sin memoria.'],
+    [0x00400000, 'Puerta abierta.'],
+    [0x00800000, 'Servidor de impresión desconocido.']
+  ];
+
+  const blocking = BLOCKING.find(([flag]) => (st & flag) !== 0);
+  if (blocking) {
+    return { resolvedName: printer.name, status: { ok: false, reason: blocking[1] } };
+  }
+
+  return { resolvedName: printer.name, status: { ok: true, reason: 'OK' } };
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +116,28 @@ function getPrinterInfo(partialName) {
  *
  * @returns {Promise<void>}  Resuelve si éxito, rechaza con Error si fallo.
  */
+function assertNotAborted(signal) {
+  if (signal && signal.aborted) {
+    throw new jobTracker.JobAbortedError();
+  }
+}
+
+/**
+ * Resuelve y valida la impresora antes de crear cualquier trabajo.
+ * @param {string} printerName
+ * @returns {string} Nombre real
+ */
+function resolveAndValidatePrinter(printerName) {
+  const { resolvedName, status } = getPrinterInfo(printerName);
+  if (!resolvedName) {
+    throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
+  }
+  if (!status.ok) {
+    throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
+  }
+  return resolvedName;
+}
+
 async function printFile(opts) {
   const {
     filePath,
@@ -107,13 +152,17 @@ async function printFile(opts) {
     fontName,
     fontSize,
     gdiTimeoutMs,
-    classicTimeoutMs
+    classicTimeoutMs,
+    directTimeoutMs,
+    signal = null,
+    onJobStarted = null
   } = opts;
 
   const log = logger.get();
+  assertNotAborted(signal);
 
   // Usar contenido pre-cargado (desde fileProcessor) o leerlo directamente
-  let content = preloadedContent || (() => {
+  const content = preloadedContent || (() => {
     try {
       return fs.readFileSync(filePath, { encoding: fileEncoding });
     } catch (e) {
@@ -125,33 +174,59 @@ async function printFile(opts) {
   const method = String(printMethod || 'DIRECT').toUpperCase();
 
   if (method === 'GDI') {
-    const { resolvedName, status } = getPrinterInfo(printerName);
-    if (!resolvedName) {
-      throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
+    const resolvedName = resolveAndValidatePrinter(printerName);
+    const timeoutMs = gdiTimeoutMs || 60000;
+    const documentName = jobTracker.makeDocumentName(docTitle);
+    const jobKey = jobTracker.makeJobKey(documentName);
+
+    if (typeof onJobStarted === 'function') {
+      onJobStarted({ printerName: resolvedName, documentName: jobKey, jobId: null });
     }
-    if (!status.ok) {
-      throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
+
+    try {
+      await gdiPrint.printGdi(content, {
+        printerName: resolvedName,
+        maxCharsPerLine,
+        bold,
+        fontName,
+        fontSize,
+        copies,
+        docTitle: documentName,
+        timeoutMs,
+        signal
+      });
+
+      const queueResult = await jobTracker.waitForJobsToClear(resolvedName, jobKey, {
+        timeoutMs,
+        signal,
+        onSeen: (jobs) => {
+          if (typeof onJobStarted === 'function') {
+            onJobStarted({
+              printerName: resolvedName,
+              documentName: jobKey,
+              jobId: jobs && jobs[0] ? jobs[0].id : null
+            });
+          }
+        }
+      });
+
+      if (queueResult.outcome === 'timeout' || queueResult.outcome === 'blocked') {
+        throw new Error(
+          `Modo GDI real: el trabajo quedó atascado en la cola (${queueResult.outcome}); ` +
+          'se canceló para no bloquear la impresora.'
+        );
+      }
+    } catch (err) {
+      jobTracker.deleteMatchingJobs(resolvedName, jobKey);
+      throw err;
     }
-    await gdiPrint.printGdi(content, {
-      printerName: resolvedName,
-      maxCharsPerLine,
-      bold,
-      fontName,
-      fontSize,
-      copies,
-      docTitle,
-      timeoutMs: gdiTimeoutMs,
-    });
     return;
-  } else if (method === 'CLASSIC' || method === 'C') {
+  }
+
+  if (method === 'CLASSIC' || method === 'C') {
     const classicPrinter = require('./classicPrinter');
-    const { resolvedName, status } = getPrinterInfo(printerName);
-    if (!resolvedName) {
-      throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
-    }
-    if (!status.ok) {
-      throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
-    }
+    const resolvedName = resolveAndValidatePrinter(printerName);
+
     await classicPrinter.printClassic(content, {
       printerName:    resolvedName,
       fontName,
@@ -161,47 +236,109 @@ async function printFile(opts) {
       fileEncoding,
       copies,
       docTitle,
-      timeoutMs: classicTimeoutMs || gdiTimeoutMs,
+      signal,
+      onJobStarted,
+      timeoutMs: classicTimeoutMs || 60000
     });
     return;
-  } else {
-    log.debug('Modo DIRECT aplicado');
   }
 
+  log.debug('Modo DIRECT aplicado');
+
   // 3. Resolver nombre real de impresora y verificar estado (una sola llamada)
-  const { resolvedName, status } = getPrinterInfo(printerName);
-  if (!resolvedName) {
-    throw new Error(`Impresora "${printerName}" no está instalada en este equipo.`);
-  }
-  if (!status.ok) {
-    throw new Error(`Impresora "${resolvedName}": ${status.reason}`);
-  }
+  const resolvedName = resolveAndValidatePrinter(printerName);
+  const timeoutMs = directTimeoutMs || 60000;
 
   // Convertir a Buffer con la codificación correcta para Winspool
   const dataBuffer = Buffer.from(content, fileEncoding);
+  const documentName = jobTracker.makeDocumentName(docTitle);
+  const jobKey = jobTracker.makeJobKey(documentName);
 
-  log.debug('Iniciando impresión', { filePath, resolvedName, copies, printMethod });
+  log.debug('Iniciando impresión', {
+    filePath,
+    resolvedName,
+    copies,
+    printMethod,
+    documentName,
+    timeoutMs
+  });
 
-  // 4. Enviar al spooler — copias secuenciales
+  // 4. Enviar al spooler — copias secuenciales, esperando cada trabajo.
   if (nativePrinter) {
-    for (let i = 0; i < copies; i++) {
-      await new Promise((resolve, reject) => {
-        nativePrinter.printDirect({
-          data:       dataBuffer,
-          printer:    resolvedName,
-          docname:    `${docTitle} (copia ${i + 1}/${copies})`,
-          type:       'RAW',
-          success:    () => {
-            log.info('Copia enviada al spooler', { copia: i + 1, copies, resolvedName, printMethod });
-            resolve();
-          },
-          error:      (err) => reject(new Error(`Error en copia ${i + 1}: ${err}`))
+    try {
+      for (let i = 0; i < copies; i++) {
+        assertNotAborted(signal);
+
+        const copyDocName = copies > 1
+          ? `${documentName} (copia ${i + 1}/${copies})`
+          : documentName;
+
+        if (typeof onJobStarted === 'function') {
+          onJobStarted({ printerName: resolvedName, documentName: jobKey, jobId: null });
+        }
+
+        const jobId = await new Promise((resolve, reject) => {
+          try {
+            nativePrinter.printDirect({
+              data:       dataBuffer,
+              printer:    resolvedName,
+              docname:    copyDocName,
+              type:       'RAW',
+              success:    (res) => resolve(res),
+              error:      (err) => reject(new Error(`Error en copia ${i + 1}: ${err}`))
+            });
+          } catch (err) {
+            reject(err);
+          }
         });
-      });
+
+        if (typeof onJobStarted === 'function') {
+          onJobStarted({
+            printerName: resolvedName,
+            documentName: jobKey,
+            jobId: jobId || null
+          });
+        }
+
+        log.info('Copia enviada al spooler', {
+          copia: i + 1,
+          copies,
+          resolvedName,
+          printMethod,
+          jobId: jobId || null,
+          documentName
+        });
+
+        const queueResult = await jobTracker.waitForJobsToClear(resolvedName, jobKey, {
+          timeoutMs,
+          signal,
+          onSeen: (jobs) => {
+            if (typeof onJobStarted === 'function') {
+              onJobStarted({
+                printerName: resolvedName,
+                documentName: jobKey,
+                jobId: jobs && jobs[0] ? jobs[0].id : jobId || null
+              });
+            }
+          }
+        });
+
+        if (queueResult.outcome === 'timeout' || queueResult.outcome === 'blocked') {
+          throw new Error(
+            `Modo DIRECT: el trabajo quedó atascado en la cola (${queueResult.outcome}); ` +
+            'se canceló para no bloquear la impresora.'
+          );
+        }
+      }
+    } catch (err) {
+      jobTracker.deleteMatchingJobs(resolvedName, jobKey);
+      throw err;
     }
   } else {
-    log.warn('Módulo nativo no disponible, usando fallback PowerShell', { resolvedName });
-    await printWithPowerShell(content, resolvedName, fileEncoding, copies);
+    log.warn('Módulo nativo no disponible, usando fallback PowerShell (sin seguimiento de cola)', {
+      resolvedName
+    });
+    await printWithPowerShell(content, resolvedName, fileEncoding, copies, signal);
   }
 
   log.info('Impresión completada', { filePath, resolvedName, copies, printMethod });
@@ -223,7 +360,7 @@ function listPrinters() {
  * Fallback: imprime usando PowerShell Out-Printer.
  * Se usa cuando el módulo nativo @tbalegas/node-printer no está disponible.
  */
-async function printWithPowerShell(content, printerName, encoding, copies) {
+async function printWithPowerShell(content, printerName, encoding, copies, signal = null) {
   const tmpFile = path.join(
     process.env.TEMP || process.env.TMP || 'C:\\Temp',
     `cbs_print_${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`
@@ -231,7 +368,21 @@ async function printWithPowerShell(content, printerName, encoding, copies) {
   try {
     fs.writeFileSync(tmpFile, content, encoding);
     for (let i = 0; i < copies; i++) {
+      assertNotAborted(signal);
+
       await new Promise((resolve, reject) => {
+        let settled = false;
+        let abortHandler = null;
+
+        const finish = (fn, value) => {
+          if (settled) return;
+          settled = true;
+          if (signal && abortHandler) {
+            try { signal.removeEventListener('abort', abortHandler); } catch {}
+          }
+          fn(value);
+        };
+
         const escapedPath = tmpFile.replace(/\\/g, '\\\\');
         const escapedName = printerName.replace(/'/g, "''");
         const ps = `
@@ -244,11 +395,26 @@ $$p = Get-CimInstance -ClassName Win32_Printer -Filter "Name='${escapedName}'"
           ['-NoProfile', '-NonInteractive', '-Command', ps],
           { timeout: 30000, windowsHide: true },
           (err) => {
-            if (err) reject(new Error(`PowerShell fallback error (copia ${i + 1}): ${err.message}`));
-            else resolve();
+            if (err) {
+              finish(reject, new Error(`PowerShell fallback error (copia ${i + 1}): ${err.message}`));
+            } else {
+              finish(resolve);
+            }
           }
         );
-        child.on('error', reject);
+
+        child.on('error', (err) => finish(reject, err));
+
+        if (signal) {
+          abortHandler = () => {
+            if (child.pid) {
+              execFile('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+            }
+            finish(reject, new jobTracker.JobAbortedError());
+          };
+          if (signal.aborted) abortHandler();
+          else signal.addEventListener('abort', abortHandler, { once: true });
+        }
       });
     }
   } finally {

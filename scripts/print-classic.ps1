@@ -31,7 +31,8 @@ param(
     [switch]$Bold,
     [int]$MaxChars = 40,
     [int]$Encoding = 1252,
-    [int]$Copies = 1
+    [int]$Copies = 1,
+    [string]$DocumentName = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -141,7 +142,9 @@ for ($i = 1; $i -le $Copies; $i++) {
     if (-not $doc.PrinterSettings.IsValid) {
         throw "La impresora '$PrinterName' no existe o no es válida en este equipo."
     }
-    $doc.DocumentName = 'Recibo'
+    $baseName = if ($DocumentName) { $DocumentName } else { 'Recibo' }
+    $doc.DocumentName = if ($Copies -gt 1) { "$baseName (copia $i/$Copies)" } else { $baseName }
+    $doc.PrintController = New-Object System.Drawing.Printing.StandardPrintController
     $doc.Print()
     $doc.Dispose()
 }

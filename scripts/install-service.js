@@ -23,6 +23,7 @@ const SERVICE_ID          = 'cbsprintservice';
 const SERVICE_KEY         = SERVICE_ID;
 const SERVICE_DESCRIPTION = 'CBS Servicio de Impresion Directa para Impresoras Matriciales';
 const SERVICE_SCRIPT      = path.join(__dirname, '..', 'src', 'index.js');
+const INSTALL_DIR         = path.join(__dirname, '..');
 const TIMEOUT_MS          = 180000;
 const START_MAX_RETRIES   = 5;
 const START_RETRY_MS      = 3000;
@@ -90,6 +91,51 @@ async function startWithRetry() {
   return false;
 }
 
+/**
+ * Ajusta el servicio en el SCM para que arranque de forma confiable:
+ *   - inicio retardado (deja montar discos y el spooler)
+ *   - reinicio automático ante fallo
+ */
+async function applyServiceHardening() {
+  console.log('Configurando inicio retardado y recuperación ante fallos...');
+
+  const delayed = await runSc(['config', SERVICE_KEY, 'start=', 'delayed-auto']);
+  if (delayed.code !== 0) {
+    console.warn(`[WARN] No se pudo configurar el inicio retardado: ${delayed.out.trim()}`);
+  } else {
+    console.log('       Inicio retardado configurado.  [OK]');
+  }
+
+  const failure = await runSc([
+    'failure', SERVICE_KEY,
+    'reset=', '86400',
+    'actions=', 'restart/60000/restart/60000/restart/60000'
+  ]);
+  if (failure.code !== 0) {
+    console.warn(`[WARN] No se pudo configurar la recuperación ante fallos: ${failure.out.trim()}`);
+  } else {
+    console.log('       Recuperación ante fallos configurada.  [OK]');
+  }
+}
+
+/**
+ * Instala la tarea programada de arranque (boot-guard).
+ * Nunca impide que el servicio quede instalado.
+ */
+async function installBootGuard() {
+  try {
+    const bootGuard = require('./install-boot-guard');
+    const result = await bootGuard.install();
+    if (result && result.ok) {
+      console.log('[OK] Tarea de arranque (boot-guard) instalada.');
+    } else {
+      console.warn(`[WARN] No se pudo instalar la tarea de arranque: ${result && result.error ? result.error : 'error desconocido'}`);
+    }
+  } catch (err) {
+    console.warn(`[WARN] No se pudo instalar la tarea de arranque: ${err.message}`);
+  }
+}
+
 const svc = new Service({
   name:         SERVICE_NAME,
   id:           SERVICE_ID,
@@ -102,6 +148,17 @@ const svc = new Service({
   maxRestarts:  3,
   wait:         2,     // segundos entre reinicios
   grow:         0.5,   // factor de crecimiento del tiempo de espera
+
+  // El spooler debe estar disponible antes de arrancar el servicio.
+  dependencies: ['Spooler'],
+
+  // Directorio de trabajo y logs del wrapper (WinSW).
+  workingdirectory: INSTALL_DIR,
+  logpath: path.join(INSTALL_DIR, 'logs'),
+
+  // Dar tiempo al apagado ordenado (drenaje de cola + cancelación).
+  stopparentfirst: true,
+  stoptimeout: 30,
 
   // Variables de entorno disponibles para el proceso del servicio
   env: [
@@ -121,8 +178,11 @@ svc.on('install', async () => {
     return;
   }
 
+  await applyServiceHardening();
+
   if (await isRunning()) {
     console.log(`[OK] El servicio "${SERVICE_NAME}" ya está en ejecución.`);
+    await installBootGuard();
     finish(0);
     return;
   }
@@ -130,6 +190,7 @@ svc.on('install', async () => {
   console.log('Iniciando servicio...');
   if (await startWithRetry()) {
     console.log(`[OK] Servicio "${SERVICE_NAME}" iniciado correctamente.`);
+    await installBootGuard();
     finish(0);
   } else {
     console.error(`[ERROR] No se pudo iniciar el servicio tras ${START_MAX_RETRIES} intentos.`);
@@ -146,14 +207,20 @@ svc.on('start', () => {
 
 svc.on('alreadyinstalled', async () => {
   console.log(`[INFO] El servicio "${SERVICE_NAME}" ya estaba instalado.`);
+  console.log('       (node-windows no regenera el XML en este caso; use update.bat para reinstalar).');
+
+  await applyServiceHardening();
+
   if (await isRunning()) {
     console.log(`[OK] El servicio "${SERVICE_NAME}" está en ejecución.`);
+    await installBootGuard();
     finish(0);
     return;
   }
   console.log('Iniciando servicio...');
   if (await startWithRetry()) {
     console.log(`[OK] Servicio "${SERVICE_NAME}" iniciado correctamente.`);
+    await installBootGuard();
     finish(0);
   } else {
     console.error('[ERROR] No se pudo iniciar el servicio. Ejecute como Administrador:');
@@ -183,5 +250,11 @@ console.log(`\nScript del servicio : ${SERVICE_SCRIPT}`);
 console.log(`Nombre visible      : ${SERVICE_NAME}`);
 console.log(`Nombre interno      : ${SERVICE_KEY}`);
 console.log('\nInstalando...\n');
+
+try {
+  fs.mkdirSync(path.join(INSTALL_DIR, 'logs'), { recursive: true });
+} catch (err) {
+  console.warn(`[WARN] No se pudo crear ${path.join(INSTALL_DIR, 'logs')}: ${err.message}`);
+}
 
 svc.install();

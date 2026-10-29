@@ -20,6 +20,31 @@ echo [SERVICIO WINDOWS]
 sc query %SERVICE_KEY% | findstr /I "STATE ESTADO NOMBRE_SERVICIO SERVICE_NAME"
 echo.
 
+:: ── 1b. Estado del spooler ───────────────────────────────────────────────────
+echo [SPOOLER]
+sc query Spooler | findstr /I "STATE ESTADO NOMBRE_SERVICIO SERVICE_NAME RUNNING STOPPED"
+if errorlevel 1 echo   No se pudo consultar el servicio Spooler.
+echo.
+
+:: ── 1c. Tarea de arranque (boot-guard) ───────────────────────────────────────
+echo [TAREA DE ARRANQUE]
+schtasks /Query /TN "\CBS Print Service\CBSBootGuard" >nul 2>&1
+if errorlevel 1 (
+    echo   No registrada (ejecute install.bat o update.bat como Administrador).
+) else (
+    schtasks /Query /TN "\CBS Print Service\CBSBootGuard" /FO LIST 2>nul | findstr /I "TaskName Status Estado"
+)
+echo.
+
+:: ── 1d. Ultimas lineas del log de arranque ───────────────────────────────────
+echo [LOG DE ARRANQUE]
+if exist "C:\ProgramData\CBSPrintService\startup.log" (
+    powershell -NoProfile -Command "Get-Content -LiteralPath 'C:\ProgramData\CBSPrintService\startup.log' -Tail 15" 2>nul
+) else (
+    echo   No disponible.
+)
+echo.
+
 :: ── 2. Health check (si existe) ───────────────────────────────────────────────
 echo [HEALTH CHECK]
 if exist "C:\CBS\PrintService\healthcheck.json" (

@@ -1,3 +1,24 @@
+RIESGOS OPERATIVOS DE LA LIMPIEZA AUTOMATICA (v3.2.3+)
+
+- Al arrancar, el servicio elimina de watchFolder los .txt con prefijo Rec/Val
+  (deletePendingOnStartup = true). Es irreversible: no se mueven a Historico.
+  Solo afecta al nivel superior de watchFolder; no toca Historico, Errores ni Logs.
+- Tambien se cancelan del spooler los trabajos propios (documento "CBSPrint|...").
+  Con cleanupLegacyCbsJobs = true tambien se eliminan nombres de versiones
+  anteriores ("Recibo", "Rec*.txt", "Val*.txt") que puedan estar atascados.
+  Un trabajo cancelado no se puede recuperar; hay que reimprimir el documento.
+- Si un trabajo no sale de la cola en el timeout configurado (60 s por defecto),
+  se cancela y el archivo se mueve a Errores (o se deja pendiente si el servicio
+  se esta apagando). Si la impresora esta apagada, el documento no se imprime:
+  se debe encender la impresora y reimprimir.
+- La tarea CBSBootGuard se ejecuta como SYSTEM al arrancar Windows (30 s de
+  retardo), espera al spooler y al disco, limpia la cola y arranca el servicio.
+  Se elimina al desinstalar (uninstall.bat, setup.iss o uninstall-service.js).
+- Para inspeccionar o limpiar manualmente la cola:
+    node scripts/limpiar-cola.js
+    node scripts/limpiar-cola.js --delete-cbs --delete-legacy
+    node scripts/limpiar-cola.js --delete-all --yes   (afecta a TODAS las apps)
+
 El servicio depende de tres capas, cada una con su propio riesgo:
 
 1. Node.js runtime — Bajo riesgo. Node.js 18+ tiene soporte LTS hasta 2028. Si en el futuro deja de ejecutarse en Windows, bastaría con actualizar Node.js.

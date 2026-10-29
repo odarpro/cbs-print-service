@@ -94,6 +94,17 @@ if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CBSAlertWatche
     echo Bat legacy de Startup eliminado. >> "%UNINSTALL_LOG%"
 )
 
+:: ── 1c) Eliminar tarea programada de arranque (boot-guard) ──────────────────
+echo [1c] Eliminando tarea de arranque (boot-guard)...
+echo [%DATE% %TIME%] Eliminando boot-guard... >> "%UNINSTALL_LOG%"
+schtasks.exe /End /TN "\CBS Print Service\CBSBootGuard" >> "%UNINSTALL_LOG%" 2>&1
+schtasks.exe /Delete /TN "\CBS Print Service\CBSBootGuard" /F >> "%UNINSTALL_LOG%" 2>&1
+if !errorLevel! equ 0 (
+    echo [%DATE% %TIME%] Boot-guard eliminado. >> "%UNINSTALL_LOG%"
+) else (
+    echo [%DATE% %TIME%] Boot-guard no existia o no se pudo eliminar. >> "%UNINSTALL_LOG%"
+)
+
 :: ── 2) Fallback: detener y eliminar servicio directamente con sc.exe ────────
 echo.
 echo [2/3] Asegurando que el servicio esté detenido y eliminado (fallback)...

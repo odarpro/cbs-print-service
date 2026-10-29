@@ -14,7 +14,7 @@
 ; =============================================================================
 
 #define MyAppName      "CBS Print Service"
-#define MyAppVersion   "3.2.2"
+#define MyAppVersion   "3.2.3"
 #define MyAppPublisher  "CBS"
 #define MyAppURL       ""
 #define MyExeName      "CBSPrintService.exe"
@@ -107,6 +107,10 @@ Filename: "{cmd}"; Parameters: "/C """"{app}\scripts\stop-alert-watcher.bat"" >>
 ; Debe ejecutarse antes de borrar {app}\scripts y dejar evidencia en uninstall.log.
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando watcher de alertas... >> ""{app}\uninstall.log"" & schtasks.exe /End /TN ""\CBS Print Service\CBSAlertWatcher"" >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSAlertWatcher"" /F >> ""{app}\uninstall.log"" 2>&1"; \
   Flags: runhidden; RunOnceId: "UninstallAlertWatcher"
+
+; Eliminar la tarea programada de arranque (boot-guard) antes de borrar scripts.
+Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando boot-guard... >> ""{app}\uninstall.log"" & schtasks.exe /End /TN ""\CBS Print Service\CBSBootGuard"" >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSBootGuard"" /F >> ""{app}\uninstall.log"" 2>&1"; \
+  Flags: runhidden; RunOnceId: "UninstallBootGuard"
 
 ; El SCM registra el servicio con el id 'cbsprintservice' (WinSW usa <id>).
 ; NO usar 'cbsprintservice.exe': ese nombre solo es el proceso wrapper.

@@ -17,7 +17,7 @@ title CBS Print Service - Instalador
 
 echo.
 echo ============================================================
-echo  CBS Print Service  v3.2.2  -  Instalador
+echo  CBS Print Service  v3.2.3  -  Instalador
 echo ============================================================
 echo.
 
@@ -161,7 +161,7 @@ if not defined NPM_EXE (
 ) else (
     echo Usando NPM: %NPM_EXE% >> "%INSTALL_LOG%"
     call "%NPM_EXE%" install --omit=dev > "%NPM_LOG%" 2>&1
-    if %errorLevel% neq 0 (
+    if errorlevel 1 (
         echo [ERROR] Fallo la instalacion de dependencias npm. Revisa el log: %NPM_LOG%
         echo Mostrando las últimas 200 líneas del log npm:
         powershell -Command "Get-Content -Path '%NPM_LOG%' -Tail 200 | ForEach-Object { $_ }"
