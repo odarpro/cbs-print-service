@@ -8,10 +8,9 @@
 //   Usa @tbalegas/node-printer para invocar WritePrinter (Winspool API)
 //   directamente — sin cmd.exe, powershell ni procesos externos.
 //
-// Fallback:
-//   Si el módulo nativo no está disponible (entornos sin Windows SDK),
-//   usa PowerShell Out-Printer. Esto invoca un proceso externo (powershell.exe)
-//   pero permite imprimir en equipos donde el módulo nativo no compila.
+// El módulo nativo es obligatorio: no hay fallback por PowerShell.
+// Si no está disponible, printFile falla con un error explícito para no
+// enviar trabajos por una ruta distinta a RAW.
 //
 // Compatibilidad: Windows 10 / Windows 11, Node.js >= 18 LTS.
 //
@@ -21,14 +20,13 @@
 
 const fs       = require('fs');
 const path     = require('path');
-const { execFile } = require('child_process');
 const logger   = require('./logger');
 const gdiPrint = require('./gdiPrinter');
 const jobTracker = require('./jobTracker');
 
 // ---------------------------------------------------------------------------
 // Carga del módulo nativo.
-// Si no está instalado se usa el stub para entornos de desarrollo/CI Linux.
+// Si no está instalado, nativePrinter queda null y printFile falla.
 // ---------------------------------------------------------------------------
 let nativePrinter;
 try {
@@ -335,10 +333,10 @@ async function printFile(opts) {
       throw err;
     }
   } else {
-    log.warn('Módulo nativo no disponible, usando fallback PowerShell (sin seguimiento de cola)', {
-      resolvedName
-    });
-    await printWithPowerShell(content, resolvedName, fileEncoding, copies, signal);
+    throw new Error(
+      'El módulo nativo @tbalegas/node-printer no está disponible. ' +
+      'Reinstale las dependencias antes de imprimir.'
+    );
   }
 
   log.info('Impresión completada', { filePath, resolvedName, copies, printMethod });
@@ -354,72 +352,6 @@ function listPrinters() {
     name:   p.name,
     status: p.statusNumber === 0 ? 'OK' : `status=${p.statusNumber}`
   }));
-}
-
-/**
- * Fallback: imprime usando PowerShell Out-Printer.
- * Se usa cuando el módulo nativo @tbalegas/node-printer no está disponible.
- */
-async function printWithPowerShell(content, printerName, encoding, copies, signal = null) {
-  const tmpFile = path.join(
-    process.env.TEMP || process.env.TMP || 'C:\\Temp',
-    `cbs_print_${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`
-  );
-  try {
-    fs.writeFileSync(tmpFile, content, encoding);
-    for (let i = 0; i < copies; i++) {
-      assertNotAborted(signal);
-
-      await new Promise((resolve, reject) => {
-        let settled = false;
-        let abortHandler = null;
-
-        const finish = (fn, value) => {
-          if (settled) return;
-          settled = true;
-          if (signal && abortHandler) {
-            try { signal.removeEventListener('abort', abortHandler); } catch {}
-          }
-          fn(value);
-        };
-
-        const escapedPath = tmpFile.replace(/\\/g, '\\\\');
-        const escapedName = printerName.replace(/'/g, "''");
-        const ps = `
-$$data = [System.IO.File]::ReadAllBytes('${escapedPath}')
-$$p = Get-CimInstance -ClassName Win32_Printer -Filter "Name='${escapedName}'"
-[void]($$p | Invoke-CimMethod -MethodName PrintDirect @{data=$$data})
-`;
-        const child = execFile(
-          'powershell.exe',
-          ['-NoProfile', '-NonInteractive', '-Command', ps],
-          { timeout: 30000, windowsHide: true },
-          (err) => {
-            if (err) {
-              finish(reject, new Error(`PowerShell fallback error (copia ${i + 1}): ${err.message}`));
-            } else {
-              finish(resolve);
-            }
-          }
-        );
-
-        child.on('error', (err) => finish(reject, err));
-
-        if (signal) {
-          abortHandler = () => {
-            if (child.pid) {
-              execFile('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
-            }
-            finish(reject, new jobTracker.JobAbortedError());
-          };
-          if (signal.aborted) abortHandler();
-          else signal.addEventListener('abort', abortHandler, { once: true });
-        }
-      });
-    }
-  } finally {
-    try { fs.unlinkSync(tmpFile); } catch {}
-  }
 }
 
 module.exports = { printFile, listPrinters, getPrinterInfo };

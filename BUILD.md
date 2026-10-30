@@ -30,12 +30,12 @@ El script:
 5. Ejecuta `npm install`
 6. Compila el vigilante Java con JDK 17+
 7. Ejecuta `npm test`
-8. Genera `dist\CBSPrintService_3.2.3_Setup.exe`
+8. Genera `dist\CBSPrintService_3.2.5_Setup.exe`
 
 ## Instalación silenciosa (SCCM / GPO)
 
 ```batch
-CBSPrintService_3.2.3_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="C:\cbs_install.log"
+CBSPrintService_3.2.5_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="C:\cbs_install.log"
 ```
 
 ## Despliegue masivo
@@ -45,7 +45,7 @@ CBSPrintService_3.2.3_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="C:\cbs_insta
 2. Tipo: Script de instalación de Windows
 3. Comando de instalación:
    ```
-CBSPrintService_3.2.3_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
+CBSPrintService_3.2.5_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
    ```
 4. Detección: `ProductCode {B8F4A3D2-1E5C-4A7B-9D6F-8C2E3F1A5B7D}`
 
@@ -54,18 +54,18 @@ CBSPrintService_3.2.3_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
 2. Crear GPO → Configuración del equipo → Scripts de inicio
 3. Agregar script:
    ```batch
-\\domain\NETLOGON\CBS\CBSPrintService_3.2.3_Setup.exe /VERYSILENT
+\\domain\NETLOGON\CBS\CBSPrintService_3.2.5_Setup.exe /VERYSILENT
    ```
 
 ### Opción 3: PDQ / Lanzadores
 ```batch
-CBSPrintService_3.2.3_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="%TEMP%\cbs_install.log"
+CBSPrintService_3.2.5_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="%TEMP%\cbs_install.log"
 ```
 
 ## Notas
 
 - El instalador incluye `node_modules` pre-compilados. Se debe ejecutar `build.bat` solo en la máquina de build.
-- Los equipos destino requieren Java 17+ para ejecutar el vigilante de alertas.
+- Los equipos destino requieren Java 8+ para ejecutar el vigilante de alertas.
 - `config.json` se crea con valores por defecto si no existe en el destino.
 - Las rutas de carpetas se configuran durante la instalación (o se editan en `config.json` después).
 - Si no instalas VS Build Tools, el módulo nativo `@tbalegas/node-printer` no se compilará. El instalador funcionará pero la impresión fallará hasta que se compile en cada máquina destino con `npm install`.

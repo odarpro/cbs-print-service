@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
@@ -14,6 +15,7 @@ import java.nio.file.WatchService;
 import java.util.Comparator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -30,7 +32,7 @@ public final class AlertWatcher {
       return;
     }
 
-    Path appDir = args.length > 0 ? Path.of(args[0]) : Path.of(System.getProperty("user.dir"));
+    Path appDir = args.length > 0 ? Paths.get(args[0]) : Paths.get(System.getProperty("user.dir"));
     Path alertDir = resolveAlertDir(appDir.resolve("config.json"));
     try (FileChannel lockChannel = FileChannel.open(alertDir.resolve(".watcher.lock"),
         StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
@@ -50,17 +52,21 @@ public final class AlertWatcher {
 
   private static Path resolveAlertDir(Path configPath) {
     try {
-      String config = Files.readString(configPath, StandardCharsets.UTF_8);
+      String config = readUtf8(configPath);
       Matcher matcher = LOG_FOLDER.matcher(config);
       if (matcher.find()) {
-        Path logDir = Path.of(matcher.group(1).replace("\\\\", "\\"));
+        Path logDir = Paths.get(matcher.group(1).replace("\\\\", "\\"));
         Path parent = logDir.getParent();
         if (parent != null) return parent.resolve("Alertas");
       }
     } catch (IOException | RuntimeException ignored) {
       // Se usa la ruta estándar si config.json no está disponible o es inválido.
     }
-    return Path.of(DEFAULT_ALERT_DIR);
+    return Paths.get(DEFAULT_ALERT_DIR);
+  }
+
+  private static String readUtf8(Path path) throws IOException {
+    return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
   }
 
   private static void watch(Path alertDir) throws IOException {
@@ -84,7 +90,7 @@ public final class AlertWatcher {
   }
 
   private static void processPending(Path alertDir) throws IOException {
-    try (var files = Files.list(alertDir)) {
+    try (Stream<Path> files = Files.list(alertDir)) {
       files.filter(file -> file.getFileName().toString().toLowerCase().endsWith(".txt"))
           .sorted(Comparator.comparing(Path::toString))
           .forEach(AlertWatcher::processAlert);
@@ -93,7 +99,7 @@ public final class AlertWatcher {
 
   private static void processAlert(Path file) {
     try {
-      String content = Files.readString(file, StandardCharsets.UTF_8).trim();
+      String content = readUtf8(file).trim();
       if (content.isEmpty()) return;
 
       String[] titleAndBody = content.split("\\R\\R", 2);

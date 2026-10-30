@@ -21,6 +21,7 @@ const logger   = require('./logger');
 const watcher  = require('./watcher');
 const notifier = require('./notifier');
 const jobTracker = require('./jobTracker');
+const { migrateConfig } = require('./configMigration');
 
 // ---------------------------------------------------------------------------
 // Rutas base y log de arranque (independiente de config.json)
@@ -106,11 +107,24 @@ function loadConfig() {
   }
 
   const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+  let config;
   try {
-    return JSON.parse(raw);
+    config = JSON.parse(raw);
   } catch (e) {
     throw new Error(`config.json inválido: ${e.message}`);
   }
+
+  const changes = migrateConfig(config);
+  if (changes.length > 0) {
+    try {
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+      bootstrapLog(`config.json migrado: ${changes.map(change => change.key).join(', ')}`);
+    } catch (err) {
+      bootstrapLog('No se pudo guardar config.json migrado; se usará en memoria', err);
+    }
+  }
+
+  return config;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +205,7 @@ async function bootstrap() {
   }
 
   appLog('info', '============================================================');
-  appLog('info', 'CBS Print Service  v3.2.3  arrancando...');
+  appLog('info', 'CBS Print Service  v3.2.5  arrancando...');
   appLog('info', '============================================================');
   appLog('info', 'Configuración cargada', { configPath: CONFIG_PATH });
 

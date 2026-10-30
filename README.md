@@ -17,7 +17,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 | Windows | 10 / 11 (64 bits) |
 | Node.js | 18 LTS o superior |
 | npm | incluido con Node.js |
-| Java | JRE 17 o superior en `PATH` o `JAVA_HOME` (para las alertas visuales) |
+| Java | JRE 8 o superior en `PATH` o `JAVA_HOME` (para las alertas visuales) |
 | Impresora | Driver instalado (USB, LPT, red) |
 
 ---
@@ -32,7 +32,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_3.2.3_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.2.5_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -53,9 +53,9 @@ Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, 
 | `logFolder` | string | `D:\Impresiones\Logs` | Carpeta de logs rotativos diarios |
 | `logLevel` | string | `"info"` | Nivel de log: `error`, `warn`, `info`, `debug` |
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
-| `historyRetentionDays` | number | `30` | Días de retención de archivos en `historyFolder` |
-| `errorRetentionDays` | number | `90` | Días de retención de archivos en `errorFolder` |
-| `alertRetentionDays` | number | `7` | Días de retención de alertas no leídas en la carpeta `Alertas` |
+| `historyRetentionDays` | number | `3` | Días de retención de archivos en `historyFolder` |
+| `errorRetentionDays` | number | `15` | Días de retención de archivos en `errorFolder` |
+| `alertRetentionDays` | number | `1` | Días de retención de alertas no leídas en la carpeta `Alertas` |
 | `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (GDI nativo con word-wrap) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43C` = Clásico/GDI+ VB |
 | `gdiTimeoutMs` | number | `60000` | (Modo GDI real `43I`) Timeout del worker thread en ms. Si el driver no responde, el worker se termina y el archivo sigue la lógica de reintentos/errores |
 | `classicTimeoutMs` | number | `60000` | (Modo CLÁSICO `43C`) Timeout de PowerShell en ms. Si el driver no responde, se finaliza el árbol de procesos y el archivo sigue la lógica de reintentos/errores |
@@ -241,7 +241,7 @@ El vigilante se instala automáticamente durante la post-instalación. Para inst
 C:\CBS\PrintService\scripts\install-alert-watcher.bat
 ```
 
-El instalador exige Java 17 o superior en `PATH` o `JAVA_HOME`. El vigilante se inicia de inmediato y también en cada inicio de sesión.
+El instalador exige Java 8 o superior en `PATH` o `JAVA_HOME`. El vigilante se inicia de inmediato y también en cada inicio de sesión.
 
 ### Verificar el vigilante activo
 
@@ -285,9 +285,9 @@ La salida debe mostrar un proceso `javaw.exe` o `java.exe` que ejecute `cbs-aler
 | `uninstall-service.js` | Elimina el servicio del SCM |
 | `diagnostico.js` | Diagnóstico: muestra config, verifica carpetas, lista impresoras instaladas, archivos pendientes |
 | `populate-printers.js` | Detecta impresora por defecto y la asigna a `printers.voucher.name` / `printers.slip.name` en `config.json` |
-| `apply-settings.js` | Aplica rutas de carpetas elegidas durante setup.exe |
+| `apply-settings.js` | Aplica rutas de carpetas y migra `config.json` con los defaults de 3.2.5 |
 | `find-node.js` / `find-node.cmd` | Localiza Node.js (system PATH o bundled portable) |
-| `build-alert-watcher.bat` | Compila `java/AlertWatcher.java` en el JAR del vigilante (requiere JDK 17+) |
+| `build-alert-watcher.bat` | Compila `java/AlertWatcher.java` en el JAR del vigilante para Java 8+ (requiere JDK 17+ en la máquina de build) |
 | `install-alert-watcher.bat` | Registra el vigilante Java para iniciar en la sesión del usuario |
 | `print-classic.ps1` | Helper del **modo CLÁSICO (43C)**: imprime con GDI+ `DrawString` (réplica del CBSprint.exe VB) vía `PrintDocument` |
 
@@ -317,6 +317,7 @@ npm run test:watch   # Modo watch
 | `tests/gdiPrinter.test.js` | Word-wrap, layout y anti-bloqueo del modo GDI real (43I): worker thread, timeout y guard PORTPROMPT |
 | `tests/classicPrinter.test.js` | Modo CLÁSICO (43C): args de PowerShell, codepage, localización del helper |
 | `tests/printer.test.js` | Resolución de impresora, envío al spooler |
+| `tests/configMigration.test.js` | Migración de configuraciones antiguas y defaults 3/15/1 |
 | `tests/notifier.test.js` | Notificaciones toast, resolución de parámetro 44 |
 
 ---
@@ -353,7 +354,7 @@ Verificar con: `status.bat` o `type C:\CBS\PrintService\healthcheck.json`.
 - Impresión vía Winspool API (`WritePrinter`) — módulo nativo `@tbalegas/node-printer`
 - Modo GDI real (43I) vía `gdi32.dll` con FFI — dependencia `koffi` (binario precompilado)
 - Servicio corre como `LocalSystem` (configurable desde SCM)
-- Fallback PowerShell solo cuando el módulo nativo no está disponible
+- Sin fallback PowerShell: si el módulo nativo no está disponible, el trabajo se rechaza y sigue la lógica de reintentos/errores
 - Notificaciones via archivos (sin UI directa desde el servicio)
 - Cada impresión queda registrada en logs con timestamp, archivo, impresora, modo, copias y resultado
 
@@ -471,3 +472,5 @@ CBS Print Service (Session 0)
 | 3.2.1 | Sep 2026 | Se corrige el JSON de configuración de ejemplo y el control del servicio Windows: `sc` y `net` ahora usan el identificador registrado `cbsprintservice`, no el ejecutable wrapper `cbsprintservice.exe`. |
 | 3.2.2 | Oct 2026 | Todo archivo que termine en la carpeta de errores genera su registro en el log global: al agotar los reintentos (y también en archivo vacío, parámetros inválidos o sin impresora) se escribe una entrada `ERROR` con motivo, etapa, impresora, intentos y el detalle de cada intento. |
 | 3.2.3 | Oct 2026 | Endurecimiento anti-bloqueo: seguimiento y cancelación de trabajos en el spooler, timeouts de 60 s, limpieza de trabajos huérfanos al arrancar, apagado ordenado, tarea de arranque `CBSBootGuard`, utilidad `limpiar-cola.js` y diagnóstico ampliado. |
+| 3.2.4 | Oct 2026 | El vigilante Java de alertas se compila para Java 8+, por lo que ya es compatible con equipos que tienen Java 8 Update 121 o superior. |
+| 3.2.5 | Oct 2026 | Se elimina el uso de WMI (`wmic` y `Get-CimInstance Win32_Process`) durante la instalación y desinstalación del vigilante de alertas, evitando bloqueos y eventos 4662 en equipos con WMI lento o auditado. Se elimina el fallback PowerShell no funcional; la impresión RAW requiere el módulo nativo. La actualización migra configuraciones antiguas (timeouts de 5 s a 60 s y nuevos flags anti-bloqueo). El watcher iniciado manualmente fuera de la tarea ya no se detiene automáticamente. |

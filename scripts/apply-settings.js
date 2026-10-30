@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { migrateConfig } = require('../src/configMigration');
 
 const appDir = path.dirname(__dirname);
 const settingsFile = path.join(appDir, '.install-settings.txt');
@@ -18,9 +19,10 @@ const errorFolder = lines[2] || '';
 fs.unlinkSync(settingsFile);
 console.log('watchFolder:', watchFolder);
 
+let cfg;
 if (!fs.existsSync(configFile)) {
   console.log('config.json not found, creating default');
-  const cfg = {
+  cfg = {
     watchFolder, historyFolder, errorFolder,
     logFolder: path.join(watchFolder, 'Logs'),
     logLevel: 'info', logRetentionDays: 30,
@@ -35,14 +37,19 @@ if (!fs.existsSync(configFile)) {
     pollingIntervalMs: 1000, fileStabilizeMs: 500,
     retryCount: 3, retryIntervalMs: 5000
   };
-  fs.writeFileSync(configFile, JSON.stringify(cfg, null, 2), 'utf8');
 } else {
-  const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'));
   cfg.watchFolder = watchFolder;
   cfg.historyFolder = historyFolder;
   cfg.errorFolder = errorFolder;
   cfg.logFolder = path.join(watchFolder, 'Logs');
-  fs.writeFileSync(configFile, JSON.stringify(cfg, null, 2), 'utf8');
+}
+
+const changes = migrateConfig(cfg);
+fs.writeFileSync(configFile, JSON.stringify(cfg, null, 2), 'utf8');
+
+if (changes.length > 0) {
+  console.log('Migración aplicada:', changes.map(change => change.key).join(', '));
 }
 
 console.log('config.json updated');

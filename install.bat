@@ -17,7 +17,7 @@ title CBS Print Service - Instalador
 
 echo.
 echo ============================================================
-echo  CBS Print Service  v3.2.3  -  Instalador
+echo  CBS Print Service  v3.2.5  -  Instalador
 echo ============================================================
 echo.
 

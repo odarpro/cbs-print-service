@@ -14,7 +14,7 @@
 ; =============================================================================
 
 #define MyAppName      "CBS Print Service"
-#define MyAppVersion   "3.2.3"
+#define MyAppVersion   "3.2.5"
 #define MyAppPublisher  "CBS"
 #define MyAppURL       ""
 #define MyExeName      "CBSPrintService.exe"
@@ -99,11 +99,12 @@ Name: "{code:GetAlertFolder}";         Permissions: users-modify
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Iniciando desinstalacion >> ""{app}\uninstall.log"""; \
   Flags: runhidden; RunOnceId: "UninstallLogStart"
 
-; Finalizar vigilantes Java iniciados manualmente o fuera de la tarea programada.
+; Finaliza la tarea programada del vigilante. Un watcher lanzado manualmente
+; fuera de la tarea ya no se termina automáticamente (no se usa WMI).
 Filename: "{cmd}"; Parameters: "/C """"{app}\scripts\stop-alert-watcher.bat"" >> ""{app}\uninstall.log"" 2>&1"""; \
   Flags: runhidden; RunOnceId: "UninstallAlertWatcherProcess"
 
-; Eliminar la tarea de alertas y detener el watcher Java de la sesión del usuario.
+; Eliminar la tarea de alertas (detiene el watcher iniciado por la tarea).
 ; Debe ejecutarse antes de borrar {app}\scripts y dejar evidencia en uninstall.log.
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando watcher de alertas... >> ""{app}\uninstall.log"" & schtasks.exe /End /TN ""\CBS Print Service\CBSAlertWatcher"" >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSAlertWatcher"" /F >> ""{app}\uninstall.log"" 2>&1"; \
   Flags: runhidden; RunOnceId: "UninstallAlertWatcher"

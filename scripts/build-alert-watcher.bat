@@ -21,7 +21,7 @@ if errorlevel 1 (
 if exist "%BUILD_DIR%" rmdir /s /q "%BUILD_DIR%"
 mkdir "%BUILD_DIR%\classes" >nul 2>&1
 
-javac.exe --release 17 -d "%BUILD_DIR%\classes" "%SOURCE%"
+javac.exe --release 8 -Xlint:-options -d "%BUILD_DIR%\classes" "%SOURCE%"
 if errorlevel 1 exit /b 1
 
 jar.exe --create --file "%OUTPUT%" --main-class AlertWatcher -C "%BUILD_DIR%\classes" .

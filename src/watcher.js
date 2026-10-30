@@ -216,12 +216,12 @@ class FolderWatcher {
     const log = logger.get();
     const cfg = this.config;
     const folders = [
-      { name: 'Histórico', dir: cfg.historyFolder, days: normalizeRetentionDays(cfg.historyRetentionDays, 30) },
-      { name: 'Errores', dir: cfg.errorFolder, days: normalizeRetentionDays(cfg.errorRetentionDays, 90) },
+      { name: 'Histórico', dir: cfg.historyFolder, days: normalizeRetentionDays(cfg.historyRetentionDays, 3) },
+      { name: 'Errores', dir: cfg.errorFolder, days: normalizeRetentionDays(cfg.errorRetentionDays, 15) },
       {
         name: 'Alertas',
         dir: cfg.logFolder ? path.join(path.dirname(cfg.logFolder), 'Alertas') : null,
-        days: normalizeRetentionDays(cfg.alertRetentionDays, 7)
+        days: normalizeRetentionDays(cfg.alertRetentionDays, 1)
       }
     ];
 
