@@ -14,7 +14,7 @@
 ; =============================================================================
 
 #define MyAppName      "CBS Print Service"
-#define MyAppVersion   "3.2.5"
+#define MyAppVersion   "3.2.6"
 #define MyAppPublisher  "CBS"
 #define MyAppURL       ""
 #define MyExeName      "CBSPrintService.exe"
@@ -99,33 +99,34 @@ Name: "{code:GetAlertFolder}";         Permissions: users-modify
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Iniciando desinstalacion >> ""{app}\uninstall.log"""; \
   Flags: runhidden; RunOnceId: "UninstallLogStart"
 
-; Finaliza la tarea programada del vigilante. Un watcher lanzado manualmente
-; fuera de la tarea ya no se termina automáticamente (no se usa WMI).
-Filename: "{cmd}"; Parameters: "/C """"{app}\scripts\stop-alert-watcher.bat"" >> ""{app}\uninstall.log"" 2>&1"""; \
-  Flags: runhidden; RunOnceId: "UninstallAlertWatcherProcess"
+; Limpieza completa: tareas, servicio, arbol de procesos, Event Log, RunOnce,
+; ProgramData y carpetas de impresion configuradas en config.json.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"" -LogPath ""{app}\uninstall.log"" -DeleteData"; \
+  Flags: runhidden waituntilterminated; RunOnceId: "UninstallCleanup"
 
-; Eliminar la tarea de alertas (detiene el watcher iniciado por la tarea).
-; Debe ejecutarse antes de borrar {app}\scripts y dejar evidencia en uninstall.log.
-Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando watcher de alertas... >> ""{app}\uninstall.log"" & schtasks.exe /End /TN ""\CBS Print Service\CBSAlertWatcher"" >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSAlertWatcher"" /F >> ""{app}\uninstall.log"" 2>&1"; \
-  Flags: runhidden; RunOnceId: "UninstallAlertWatcher"
-
-; Eliminar la tarea programada de arranque (boot-guard) antes de borrar scripts.
-Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando boot-guard... >> ""{app}\uninstall.log"" & schtasks.exe /End /TN ""\CBS Print Service\CBSBootGuard"" >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSBootGuard"" /F >> ""{app}\uninstall.log"" 2>&1"; \
-  Flags: runhidden; RunOnceId: "UninstallBootGuard"
-
-; El SCM registra el servicio con el id 'cbsprintservice' (WinSW usa <id>).
-; NO usar 'cbsprintservice.exe': ese nombre solo es el proceso wrapper.
-; Detener servicio y terminar el proceso wrapper si no respeta la parada.
-Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Deteniendo servicio... >> ""{app}\uninstall.log"" & sc stop cbsprintservice >> ""{app}\uninstall.log"" 2>&1 & timeout /t 3 /nobreak >nul & taskkill /F /IM cbsprintservice.exe >> ""{app}\uninstall.log"" 2>&1"; \
-  Flags: runhidden; RunOnceId: "UninstallStop"
-
-; Eliminar servicio
-Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Eliminando servicio... >> ""{app}\uninstall.log"" & sc delete cbsprintservice >> ""{app}\uninstall.log"" 2>&1 & timeout /t 2 /nobreak >nul"; \
-  Flags: runhidden; RunOnceId: "UninstallDelete"
+; Respaldo por si PowerShell no pudiera ejecutar el script de limpieza.
+Filename: "cmd.exe"; Parameters: "/C taskkill /F /T /IM cbsprintservice.exe >> ""{app}\uninstall.log"" 2>&1 & sc.exe delete cbsprintservice >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSAlertWatcher"" /F >> ""{app}\uninstall.log"" 2>&1 & schtasks.exe /Delete /TN ""\CBS Print Service\CBSBootGuard"" /F >> ""{app}\uninstall.log"" 2>&1"; \
+  Flags: runhidden; RunOnceId: "UninstallFallback"
 
 ; Log fin
 Filename: "cmd.exe"; Parameters: "/C echo [%DATE% %TIME%] Servicio eliminado. >> ""{app}\uninstall.log"""; \
   Flags: runhidden; RunOnceId: "UninstallLogEnd"
+
+[UninstallDelete]
+; Archivos generados despues de la instalacion y que Inno no registra.
+Type: files; Name: "{app}\healthcheck.json"
+Type: files; Name: "{app}\install.log"
+Type: files; Name: "{app}\uninstall.log"
+Type: files; Name: "{app}\.install-settings.txt"
+Type: files; Name: "{app}\config.json"
+Type: files; Name: "{app}\config.example.json"
+Type: filesandordirs; Name: "{app}\logs"
+Type: filesandordirs; Name: "{app}\daemon"
+Type: filesandordirs; Name: "{app}\src\daemon"
+Type: filesandordirs; Name: "{commonappdata}\CBSPrintService"
+Type: dirifempty; Name: "{app}\src"
+Type: dirifempty; Name: "{app}"
+Type: dirifempty; Name: "{app}\.."
 
 [Registry]
 ; Respaldo: ejecutar post-instalación en el próximo inicio de sesión

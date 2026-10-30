@@ -32,14 +32,14 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_3.2.5_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.2.6_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
 Ejecutar `update.bat` como **Administrador**: detiene el servicio, reemplaza src/scripts/package.json, reinstala dependencias y reinicia. **config.json no se modifica**.
 
 ### Desinstalación
-Ejecutar `uninstall.bat` como **Administrador**: detiene y elimina el servicio, remueve archivos preservando Logs.
+Ejecutar `uninstall.bat` o el desinstalador de Windows como **Administrador**: elimina el servicio, las tareas, las fuentes de Event Log, `C:\ProgramData\CBSPrintService`, los archivos de la aplicación y las carpetas configuradas en `watchFolder`, `historyFolder`, `errorFolder`, `logFolder` y `Alertas`.
 
 ---
 
@@ -271,7 +271,7 @@ La salida debe mostrar un proceso `javaw.exe` o `java.exe` que ejecute `cbs-aler
 | Script | Admin | Descripción |
 |---|---|---|
 | `install.bat` | ✅ | Instala el servicio en `C:\CBS\PrintService`, crea carpetas, instala dependencias, registra servicio |
-| `uninstall.bat` | ✅ | Detiene, elimina el servicio y remueve archivos (preserva Logs) |
+| `uninstall.bat` | ✅ | Elimina servicio, tareas, Event Log, ProgramData, archivos y carpetas de impresión configuradas |
 | `update.bat` | ✅ | Detiene servicio, reemplaza código, reinstala dependencias y reinicia |
 | `status.bat` | ❌ | Muestra estado del servicio, health check y archivos pendientes |
 | `build.bat` | ✅ | Build completo: instala Node.js/Python/VS/Inno Setup, `npm install`, `npm test`, genera `dist\*.exe` |
@@ -474,3 +474,4 @@ CBS Print Service (Session 0)
 | 3.2.3 | Oct 2026 | Endurecimiento anti-bloqueo: seguimiento y cancelación de trabajos en el spooler, timeouts de 60 s, limpieza de trabajos huérfanos al arrancar, apagado ordenado, tarea de arranque `CBSBootGuard`, utilidad `limpiar-cola.js` y diagnóstico ampliado. |
 | 3.2.4 | Oct 2026 | El vigilante Java de alertas se compila para Java 8+, por lo que ya es compatible con equipos que tienen Java 8 Update 121 o superior. |
 | 3.2.5 | Oct 2026 | Se elimina el uso de WMI (`wmic` y `Get-CimInstance Win32_Process`) durante la instalación y desinstalación del vigilante de alertas, evitando bloqueos y eventos 4662 en equipos con WMI lento o auditado. Se elimina el fallback PowerShell no funcional; la impresión RAW requiere el módulo nativo. La actualización migra configuraciones antiguas (timeouts de 5 s a 60 s y nuevos flags anti-bloqueo). El watcher iniciado manualmente fuera de la tarea ya no se detiene automáticamente. |
+| 3.2.6 | Oct 2026 | Desinstalador completo: `scripts/uninstall-cleanup.ps1` elimina servicio, tareas, árbol de procesos, fuentes de Event Log, RunOnce, `C:\ProgramData\CBSPrintService`, archivos generados y las carpetas de impresión configuradas (`watchFolder`, `historyFolder`, `errorFolder`, `logFolder` y `Alertas`), con protección contra rutas peligrosas. `uninstall.bat` usa la misma limpieza y elimina `C:\CBS\PrintService` en segundo plano. Bump de versión a 3.2.6. |

@@ -1,16 +1,22 @@
-@echo on
+@echo off
 :: =============================================================================
 :: uninstall.bat  -  CBS Print Service
-:: Desinstala el Servicio de Windows y elimina los archivos de la aplicacion.
+:: Desinstala el servicio, las tareas, los registros y las carpetas de impresion.
 :: REQUIERE ejecutar como Administrador.
 :: =============================================================================
 
 setlocal enabledelayedexpansion
 
-:: Archivo de log del desinstalador
-set UNINSTALL_LOG=%TEMP%\cbs_uninstall.log
-if exist "%UNINSTALL_LOG%" del /q "%UNINSTALL_LOG%" >nul 2>&1
-echo Desinstalador iniciado: %DATE% %TIME% > "%UNINSTALL_LOG%"
+set "INSTALL_DIR=C:\CBS\PrintService"
+set "SERVICE_KEY=cbsprintservice"
+set "UNINSTALL_LOG=%INSTALL_DIR%\uninstall.log"
+
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Requiere privilegios de Administrador.
+    pause
+    exit /b 1
+)
 
 title CBS Print Service - Desinstalador
 
@@ -19,169 +25,57 @@ echo ============================================================
 echo  CBS Print Service  -  Desinstalador
 echo ============================================================
 echo.
-
-net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [ERROR] Requiere privilegios de Administrador.
-    echo [ERROR] Requiere privilegios de Administrador. >> "%UNINSTALL_LOG%"
-    pause
-    exit /b 1
-)
-
-set INSTALL_DIR=C:\CBS\PrintService
-set SERVICE_KEY=cbsprintservice
-
-echo Se eliminara el servicio y los archivos en:
-echo   %INSTALL_DIR%
+echo Se eliminaran el servicio, las tareas, los registros de Event Log
+echo y las carpetas de impresion configuradas en config.json.
 echo.
-echo Instalacion dir: %INSTALL_DIR% >> "%UNINSTALL_LOG%"
-
-:: Mostrar ambiente para depuracion
-echo PATH: %PATH%
-where node 2>nul || echo node no encontrado en PATH
-node -v 2>nul || echo node -v no disponible en este contexto
+echo Instalacion: %INSTALL_DIR%
 echo.
 
-set /p CONFIRM=Confirmar desinstalacion? (S/N): 
+set /p CONFIRM=Confirmar desinstalacion? (S/N):
 if /i "%CONFIRM%" neq "S" (
     echo Operacion cancelada.
-    echo Operacion cancelada. >> "%UNINSTALL_LOG%"
-    pause
     exit /b 0
 )
 
-echo.
-:: ── 1) Intentar desinstalar mediante script node (si existe) ───────────────
-echo [1/3] Intentando detener y desinstalar el servicio via node script...
-if exist "%INSTALL_DIR%\scripts\uninstall-service.js" (
-    cd /d "%INSTALL_DIR%"
-    set SVC_UNINSTALL_LOG=%TEMP%\cbs_service_uninstall.log
-    if exist "%SVC_UNINSTALL_LOG%" del /q "%SVC_UNINSTALL_LOG%" >nul 2>&1
-    echo Ejecutando: node scripts\uninstall-service.js >> "%UNINSTALL_LOG%"
-    if exist "%INSTALL_DIR%\bin\node.exe" (
-        "%INSTALL_DIR%\bin\node.exe" scripts\uninstall-service.js > "%SVC_UNINSTALL_LOG%" 2>&1
-    ) else (
-        node scripts\uninstall-service.js > "%SVC_UNINSTALL_LOG%" 2>&1
-    )
+if exist "%INSTALL_DIR%\scripts\uninstall-cleanup.ps1" (
+    echo Ejecutando limpieza completa...
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\scripts\uninstall-cleanup.ps1" -AppDir "%INSTALL_DIR%" -LogPath "%UNINSTALL_LOG%" -DeleteData
     if !errorLevel! neq 0 (
-        echo [WARN] El script node devolvio error. Se aplicara fallback. >> "%UNINSTALL_LOG%"
-        echo Contenido de %SVC_UNINSTALL_LOG%: >> "%UNINSTALL_LOG%"
-        type "%SVC_UNINSTALL_LOG%" >> "%UNINSTALL_LOG%"
-    ) else (
-        echo Script de desinstalacion node ejecutado correctamente. >> "%UNINSTALL_LOG%"
-        type "%SVC_UNINSTALL_LOG%"
+        echo [AVISO] La limpieza devolvio errores. Revise %UNINSTALL_LOG%.
     )
 ) else (
-    echo Script uninstall-service.js no encontrado en %INSTALL_DIR%. >> "%UNINSTALL_LOG%"
+    echo [AVISO] No se encontro uninstall-cleanup.ps1. Aplicando limpieza basica...
+    schtasks.exe /End /TN "\CBS Print Service\CBSAlertWatcher" >nul 2>&1
+    schtasks.exe /Delete /TN "\CBS Print Service\CBSAlertWatcher" /F >nul 2>&1
+    schtasks.exe /End /TN "\CBS Print Service\CBSBootGuard" >nul 2>&1
+    schtasks.exe /Delete /TN "\CBS Print Service\CBSBootGuard" /F >nul 2>&1
+    sc.exe stop "%SERVICE_KEY%" >nul 2>&1
+    taskkill.exe /F /T /IM cbsprintservice.exe >nul 2>&1
+    timeout /t 3 /nobreak >nul
+    sc.exe delete "%SERVICE_KEY%" >nul 2>&1
+    reg.exe delete "HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\cbsprintservice" /f >nul 2>&1
+    reg.exe delete "HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\cbsprintservice.exe" /f >nul 2>&1
+    reg.exe delete "HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\CBSPrintService Monitor" /f >nul 2>&1
+    reg.exe delete "HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\CBSPrintService wrapper" /f >nul 2>&1
+    reg.exe delete "HKLM\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v CBSPrintService_PostInstall /f >nul 2>&1
+    if exist "%ProgramData%\CBSPrintService" rmdir /S /Q "%ProgramData%\CBSPrintService" >nul 2>&1
+    if exist "%INSTALL_DIR%\config.json" (
+        for /f "usebackq delims=" %%P in (`powershell.exe -NoProfile -Command "$c=Get-Content -Raw -LiteralPath '%INSTALL_DIR%\config.json' | ConvertFrom-Json; if($c.watchFolder){$c.watchFolder}"`) do (
+            if exist "%%P" rmdir /S /Q "%%P" >nul 2>&1
+        )
+    )
 )
-
-:: ── 1b) Eliminar tarea programada del vigilante Java de alertas ────────────
-echo [1b] Eliminando tarea programada del vigilante de alertas...
-echo [%DATE% %TIME%] Eliminando watcher de alertas... >> "%UNINSTALL_LOG%"
-if exist "%INSTALL_DIR%\scripts\stop-alert-watcher.bat" (
-    call "%INSTALL_DIR%\scripts\stop-alert-watcher.bat" >> "%UNINSTALL_LOG%" 2>&1
-)
-schtasks.exe /End /TN "\CBS Print Service\CBSAlertWatcher" >> "%UNINSTALL_LOG%" 2>&1
-schtasks.exe /Delete /TN "\CBS Print Service\CBSAlertWatcher" /F >> "%UNINSTALL_LOG%" 2>&1
-if !errorLevel! neq 0 (
-    echo [%DATE% %TIME%] [ERROR] No se pudo eliminar el watcher de alertas. >> "%UNINSTALL_LOG%"
-) else (
-    echo [%DATE% %TIME%] Watcher de alertas eliminado. >> "%UNINSTALL_LOG%"
-)
-:: También eliminar bat legacy de Startup si existe
-if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CBSAlertWatcher.bat" (
-    del /Q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CBSAlertWatcher.bat" >> "%UNINSTALL_LOG%" 2>&1
-    echo Bat legacy de Startup eliminado. >> "%UNINSTALL_LOG%"
-)
-
-:: ── 1c) Eliminar tarea programada de arranque (boot-guard) ──────────────────
-echo [1c] Eliminando tarea de arranque (boot-guard)...
-echo [%DATE% %TIME%] Eliminando boot-guard... >> "%UNINSTALL_LOG%"
-schtasks.exe /End /TN "\CBS Print Service\CBSBootGuard" >> "%UNINSTALL_LOG%" 2>&1
-schtasks.exe /Delete /TN "\CBS Print Service\CBSBootGuard" /F >> "%UNINSTALL_LOG%" 2>&1
-if !errorLevel! equ 0 (
-    echo [%DATE% %TIME%] Boot-guard eliminado. >> "%UNINSTALL_LOG%"
-) else (
-    echo [%DATE% %TIME%] Boot-guard no existia o no se pudo eliminar. >> "%UNINSTALL_LOG%"
-)
-
-:: ── 2) Fallback: detener y eliminar servicio directamente con sc.exe ────────
-echo.
-echo [2/3] Asegurando que el servicio esté detenido y eliminado (fallback)...
-echo Deteniendo servicio (si existe) >> "%UNINSTALL_LOG%"
-sc.exe stop "%SERVICE_KEY%" >> "%UNINSTALL_LOG%" 2>&1
-call :wait_service_stopped
-taskkill /F /IM cbsprintservice.exe >> "%UNINSTALL_LOG%" 2>&1
-sc.exe delete "%SERVICE_KEY%" >> "%UNINSTALL_LOG%" 2>&1
-call :wait_service_removed
-
-:: Comprobar si sigue existiendo
-sc query "%SERVICE_KEY%" > "%TEMP%\cbs_svc_query.txt" 2>&1
-if %errorlevel% equ 0 (
-    echo [ERROR] El servicio %SERVICE_KEY% sigue existiendo. Revisa permisos/logs. >> "%UNINSTALL_LOG%"
-    echo El servicio sigue existiendo. Revisa %UNINSTALL_LOG% para detalles.
-) else (
-    echo Servicio eliminado o no existente. >> "%UNINSTALL_LOG%"
-    echo Servicio eliminado o no existente.
-)
-
-:: ── 3) Eliminar archivos de aplicacion (preservar Logs y config) ───────────
-echo.
-echo [3/3] Eliminando archivos de aplicacion (preservando Logs)...
-echo (Los logs y configuracion seran preservados en %INSTALL_DIR%\Logs) >> "%UNINSTALL_LOG%"
-if exist "%INSTALL_DIR%\src" (
-    rmdir /S /Q "%INSTALL_DIR%\src" >> "%UNINSTALL_LOG%" 2>&1
-)
-if exist "%INSTALL_DIR%\scripts" (
-    rmdir /S /Q "%INSTALL_DIR%\scripts" >> "%UNINSTALL_LOG%" 2>&1
-)
-if exist "%INSTALL_DIR%\node_modules" (
-    rmdir /S /Q "%INSTALL_DIR%\node_modules" >> "%UNINSTALL_LOG%" 2>&1
-)
-if exist "%INSTALL_DIR%\package.json" del /Q "%INSTALL_DIR%\package.json" >> "%UNINSTALL_LOG%" 2>&1
-if exist "%INSTALL_DIR%\package-lock.json" del /Q "%INSTALL_DIR%\package-lock.json" >> "%UNINSTALL_LOG%" 2>&1
 
 echo.
-echo ============================================================
-echo  Desinstalacion completada. Revisa el log: %UNINSTALL_LOG%
-echo ============================================================
+echo Desinstalacion completada. Eliminando archivos de la aplicacion...
 echo.
-type "%UNINSTALL_LOG%" | more
-pause
+
+cd /d "%TEMP%"
+> "%TEMP%\cbs_remove_app.cmd" (
+    echo @echo off
+    echo timeout /t 3 /nobreak ^>nul
+    echo rmdir /S /Q "%INSTALL_DIR%"
+    echo del /Q "%%~f0"
+)
+start "" /b cmd.exe /c ""%TEMP%\cbs_remove_app.cmd""
 exit /b 0
-
-:: -----------------------------------------------------------------------------
-:: Subrutinas: espera del estado del servicio en el SCM
-:: -----------------------------------------------------------------------------
-
-:wait_service_stopped
-set /a _tries = 0
-:wait_service_stopped_loop
-sc query "%SERVICE_KEY%" | find /I "STOPPED" >nul 2>&1
-if not errorlevel 1 (
-    echo Servicio detenido. >> "%UNINSTALL_LOG%"
-    goto :eof
-)
-set /a _tries += 1
-if %_tries% geq 15 (
-    echo [AVISO] El servicio no se detuvo a tiempo. Continuando... >> "%UNINSTALL_LOG%"
-    goto :eof
-)
-timeout /t 2 /nobreak >nul 2>&1
-goto :wait_service_stopped_loop
-
-:wait_service_removed
-set /a _tries = 0
-:wait_service_removed_loop
-sc query "%SERVICE_KEY%" >nul 2>&1
-if errorlevel 1 (
-    echo Servicio eliminado del SCM. >> "%UNINSTALL_LOG%"
-    goto :eof
-)
-set /a _tries += 1
-if %_tries% geq 15 (
-    echo [AVISO] El servicio aun figura en el SCM tras la espera. >> "%UNINSTALL_LOG%"
-    goto :eof
-)
-timeout /t 2 /nobreak >nul 2>&1
-goto :wait_service_removed_loop
