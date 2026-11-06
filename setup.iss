@@ -14,7 +14,7 @@
 ; =============================================================================
 
 #define MyAppName      "CBS Print Service"
-#define MyAppVersion   "3.2.6"
+#define MyAppVersion   "3.2.7"
 #define MyAppPublisher  "CBS"
 #define MyAppURL       ""
 #define MyExeName      "CBSPrintService.exe"

@@ -16,6 +16,7 @@
   "directTimeoutMs":     60000,
   "deletePendingOnStartup": true,
   "cleanupLegacyCbsJobs": true,
+  "strictStatusCheck":   false,
 
   "printers": {
     "voucher": {

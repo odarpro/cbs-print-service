@@ -8,7 +8,10 @@ const DEFAULTS = {
   classicTimeoutMs: 60000,
   directTimeoutMs: 60000,
   deletePendingOnStartup: true,
-  cleanupLegacyCbsJobs: true
+  cleanupLegacyCbsJobs: true,
+  // false = tolerancia legacy (solo offline/error/papelería bloquean);
+  // true  = lista estricta de 14 flags PRINTER_STATUS_*.
+  strictStatusCheck: false
 };
 
 const LEGACY_TIMEOUT_MS = 5000;

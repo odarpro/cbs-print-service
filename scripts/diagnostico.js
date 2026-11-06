@@ -84,6 +84,7 @@ async function main() {
   console.log(`  Timeouts (ms)  : GDI=${config.gdiTimeoutMs}, CLASSIC=${config.classicTimeoutMs}, DIRECT=${config.directTimeoutMs}`);
   console.log(`  Limpiar pendientes al arrancar : ${config.deletePendingOnStartup !== false}`);
   console.log(`  Limpiar jobs legacy            : ${config.cleanupLegacyCbsJobs === true}`);
+  console.log(`  Verificación estricta de estado: ${config.strictStatusCheck === true ? 'SÍ (14 flags)' : 'NO (tolerancia legacy: 3 flags)'}`);
 
   // ── 2. Carpetas ─────────────────────────────────────────────────────────────
   console.log('\n[CARPETAS]');
@@ -100,9 +101,20 @@ async function main() {
     console.log('  (ninguna impresora o módulo nativo no disponible)');
   } else {
     printers.forEach((p, i) => {
-      const status = p.statusNumber === 0 ? 'OK' : `status=${p.statusNumber}`;
+      const st = Number(p.statusNumber) || 0;
+      const status = st === 0
+        ? 'OK'
+        : `status=0x${st.toString(16).toUpperCase().padStart(4, '0')} (${st})`;
       const dflt = p.isDefault ? ' [DEFAULT]' : '';
-      console.log(`  ${String(i + 1).padStart(2)}. ${p.name}  [${status}]${dflt}`);
+      const port = p.portName ? `  puerto=${p.portName}` : '';
+      const driver = p.driverName ? `  driver=${p.driverName}` : '';
+      console.log(`  ${String(i + 1).padStart(2)}. ${p.name}  [${status}]${dflt}${port}${driver}`);
+      if (Array.isArray(p.status) && p.status.length) {
+        console.log(`      flags: ${p.status.join(', ')}`);
+      }
+      if (Array.isArray(p.attributes) && p.attributes.length) {
+        console.log(`      atributos: ${p.attributes.join(', ')}`);
+      }
     });
   }
 

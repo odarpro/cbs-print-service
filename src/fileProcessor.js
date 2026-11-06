@@ -487,6 +487,7 @@ class FileProcessor {
           gdiTimeoutMs:   cfg.gdiTimeoutMs,
           classicTimeoutMs: cfg.classicTimeoutMs,
           directTimeoutMs: cfg.directTimeoutMs,
+          strictStatusCheck: cfg.strictStatusCheck === true,
           signal,
           onJobStarted
         });

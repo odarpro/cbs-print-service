@@ -32,7 +32,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_3.2.6_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.2.7_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -65,6 +65,7 @@ Ejecutar `uninstall.bat` o el desinstalador de Windows como **Administrador**: e
 | `fileStabilizeMs` | number | `500` | Espera de estabilización antes de procesar el archivo |
 | `retryCount` | number | `3` | Reintentos adicionales ante fallo; use `0` para mover a `Errores` tras el primer fallo |
 | `retryIntervalMs` | number | `5000` | Intervalo entre reintentos en ms |
+| `strictStatusCheck` | boolean | `false` | `false` = tolerancia legacy: solo bloquean offline (`0x80`), error (`0x02`) y papel (`0x20`) — el resto de flags de estado se ignoran y el trabajo se envía al spooler. `true` = validación estricta con 14 flags `PRINTER_STATUS_*` (incluye `0x1000` "no disponible", pausa, atasco, tóner, etc.). Al bloquear, el error incluye `status=` en hex, puerto y flags reales de la cola |
 | `toastEnabled` | boolean | `true` | Habilitar notificaciones toast de Windows |
 | `toastOnSuccess` | boolean | `true` | Mostrar toast al imprimir exitosamente |
 | `toastOnError` | boolean | `true` | Mostrar toast al fallar impresión o parámetros inválidos |
@@ -448,6 +449,7 @@ CBS Print Service (Session 0)
 |---|---|---|
 | Servicio no arranca | config.json inválido o ruta no existe | Validar JSON, verificar carpetas |
 | Archivo pasa a Errores | Impresora offline o nombre incorrecto | `node scripts/diagnostico.js`, verificar nombre |
+| Archivo pasa a Errores con `Impresora no disponible` (`status=0x1000`) | Validación estricta de estado; la cola reporta un flag que la versión anterior ignoraba | Revisar `status=`, `puerto=` y `flags=` del mensaje de error; dejar `strictStatusCheck: false` (default) o corregir la cola/puerto según el diagnóstico |
 | No detecta archivos | watchFolder incorrecto | Verificar ruta en config.json |
 | Error al instalar servicio | Sin privilegios de Admin | Ejecutar como Administrador |
 | Módulo nativo no compila | Build tools no instaladas | `npm install --global windows-build-tools` |
@@ -475,3 +477,4 @@ CBS Print Service (Session 0)
 | 3.2.4 | Oct 2026 | El vigilante Java de alertas se compila para Java 8+, por lo que ya es compatible con equipos que tienen Java 8 Update 121 o superior. |
 | 3.2.5 | Oct 2026 | Se elimina el uso de WMI (`wmic` y `Get-CimInstance Win32_Process`) durante la instalación y desinstalación del vigilante de alertas, evitando bloqueos y eventos 4662 en equipos con WMI lento o auditado. Se elimina el fallback PowerShell no funcional; la impresión RAW requiere el módulo nativo. La actualización migra configuraciones antiguas (timeouts de 5 s a 60 s y nuevos flags anti-bloqueo). El watcher iniciado manualmente fuera de la tarea ya no se detiene automáticamente. |
 | 3.2.6 | Oct 2026 | Desinstalador completo: `scripts/uninstall-cleanup.ps1` elimina servicio, tareas, árbol de procesos, fuentes de Event Log, RunOnce, `C:\ProgramData\CBSPrintService`, archivos generados y las carpetas de impresión configuradas (`watchFolder`, `historyFolder`, `errorFolder`, `logFolder` y `Alertas`), con protección contra rutas peligrosas. `uninstall.bat` usa la misma limpieza y elimina `C:\CBS\PrintService` en segundo plano. Bump de versión a 3.2.6. |
+| 3.2.7 | Nov 2026 | **Tolerancia configurable del estado de impresora** (`strictStatusCheck`, default `false`): restaura el comportamiento de v3.2.2 donde solo bloqueaban offline (`0x80`), error (`0x02`) y papel (`0x20`); la lista estricta de 14 flags `PRINTER_STATUS_*` (incluye `0x1000` "no disponible", que causaba el fallo en campo) queda opcional con `true`. El error de bloqueo ahora incluye diagnóstico real (`status=` hex, puerto, driver, flags de estado y atributos). `config.json` por defecto vuelve a `retryCount: 3`. `diagnostico.js` muestra puerto/driver/flags por impresora y el modo de verificación activo. Tests nuevos de `evaluateStatus`. Bump de versión a 3.2.7. |
