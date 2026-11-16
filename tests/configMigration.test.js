@@ -6,13 +6,12 @@ const path = require('node:path');
 const { migrateConfig } = require(path.join(__dirname, '..', 'src', 'configMigration'));
 
 describe('configMigration', () => {
-  it('agrega defaults 3/15/1 y flags anti-bloqueo', () => {
+  it('agrega defaults 3/15 y flags anti-bloqueo', () => {
     const cfg = { watchFolder: 'D:\\Impresiones' };
     const changes = migrateConfig(cfg);
 
     assert.equal(cfg.historyRetentionDays, 3);
     assert.equal(cfg.errorRetentionDays, 15);
-    assert.equal(cfg.alertRetentionDays, 1);
     assert.equal(cfg.gdiTimeoutMs, 60000);
     assert.equal(cfg.classicTimeoutMs, 60000);
     assert.equal(cfg.directTimeoutMs, 60000);
@@ -48,13 +47,11 @@ describe('configMigration', () => {
   it('no pisa retenciones existentes', () => {
     const cfg = {
       historyRetentionDays: 30,
-      errorRetentionDays: 90,
-      alertRetentionDays: 7
+      errorRetentionDays: 90
     };
     migrateConfig(cfg);
 
     assert.equal(cfg.historyRetentionDays, 30);
     assert.equal(cfg.errorRetentionDays, 90);
-    assert.equal(cfg.alertRetentionDays, 7);
   });
 });

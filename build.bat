@@ -6,7 +6,7 @@ title CBS Print Service - Build
 cd /d "%~dp0"
 
 echo ============================================================
-echo  CBS Print Service  v3.2.7  -  Build
+echo  CBS Print Service  v3.2.9  -  Build
 echo ============================================================
 echo.
 
@@ -172,17 +172,8 @@ if errorlevel 1 (
     echo        Dependencias instaladas.  [OK]
 )
 
-:: 6. Compilar vigilante Java
-echo [6/7] Compilando vigilante Java...
-call scripts\build-alert-watcher.bat
-if errorlevel 1 (
-    echo [ERROR] No se pudo compilar el vigilante Java. Instale un JDK 17 o superior.
-    pause
-    exit /b 1
-)
-
-:: 7. Tests
-echo [7/7] Ejecutando tests...
+:: 6. Tests
+echo [6/6] Ejecutando tests...
 call npm test
 if errorlevel 1 (
     echo [WARN] Algunos tests fallaron.
@@ -210,7 +201,7 @@ echo ============================================================
 echo.
 dir /B dist\*.exe 2>nul
 echo.
-echo Instalador: dist\CBSPrintService_3.2.7_Setup.exe
+echo Instalador: dist\CBSPrintService_3.2.9_Setup.exe
 echo.
 echo Para distribuir, copie a las maquinas destino y ejecute:
 echo   setup.exe /VERYSILENT

@@ -19,7 +19,6 @@ const fs       = require('fs');
 const path     = require('path');
 const logger   = require('./logger');
 const watcher  = require('./watcher');
-const notifier = require('./notifier');
 const jobTracker = require('./jobTracker');
 const { migrateConfig } = require('./configMigration');
 
@@ -205,15 +204,9 @@ async function bootstrap() {
   }
 
   appLog('info', '============================================================');
-  appLog('info', 'CBS Print Service  v3.2.7  arrancando...');
+  appLog('info', 'CBS Print Service  v3.2.9  arrancando...');
   appLog('info', '============================================================');
   appLog('info', 'Configuración cargada', { configPath: CONFIG_PATH });
-
-  try {
-    notifier.init(config);
-  } catch (err) {
-    appLog('warn', 'No se pudo inicializar el notificador', { error: err.message });
-  }
 
   // Limpiar trabajos propios que hayan quedado atascados de una ejecución anterior.
   await cleanupStaleJobs(config);
@@ -303,7 +296,6 @@ process.on('SIGBREAK',() => shutdown('SIGBREAK'));   // Ctrl+Break en Windows
 process.on('uncaughtException', (err) => {
   bootstrapLog('Excepción no capturada', err);
   appLog('error', 'Excepción no capturada', { error: err.message, stack: err.stack });
-  try { notifier.notifyCritical('Excepción no capturada', err.message); } catch {}
   updateHealthCheck('error');
 });
 
@@ -314,7 +306,6 @@ process.on('unhandledRejection', (reason) => {
     reason: msg,
     stack: reason instanceof Error ? reason.stack : undefined
   });
-  try { notifier.notifyCritical('Promise rechazada sin manejar', msg); } catch {}
   updateHealthCheck('error');
 });
 

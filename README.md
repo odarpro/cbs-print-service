@@ -17,7 +17,6 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 | Windows | 10 / 11 (64 bits) |
 | Node.js | 18 LTS o superior |
 | npm | incluido con Node.js |
-| Java | JRE 8 o superior en `PATH` o `JAVA_HOME` (para las alertas visuales) |
 | Impresora | Driver instalado (USB, LPT, red) |
 
 ---
@@ -32,14 +31,14 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_3.2.7_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.2.9_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
 Ejecutar `update.bat` como **Administrador**: detiene el servicio, reemplaza src/scripts/package.json, reinstala dependencias y reinicia. **config.json no se modifica**.
 
 ### Desinstalación
-Ejecutar `uninstall.bat` o el desinstalador de Windows como **Administrador**: elimina el servicio, las tareas, las fuentes de Event Log, `C:\ProgramData\CBSPrintService`, los archivos de la aplicación y las carpetas configuradas en `watchFolder`, `historyFolder`, `errorFolder`, `logFolder` y `Alertas`.
+Ejecutar `uninstall.bat` o el desinstalador de Windows como **Administrador**: elimina el servicio, las tareas, las fuentes de Event Log, `C:\ProgramData\CBSPrintService`, los archivos de la aplicación y las carpetas configuradas en `watchFolder`, `historyFolder`, `errorFolder` y `logFolder`.
 
 ---
 
@@ -55,7 +54,6 @@ Ejecutar `uninstall.bat` o el desinstalador de Windows como **Administrador**: e
 | `logRetentionDays` | number | `30` | Días de retención de archivos de log |
 | `historyRetentionDays` | number | `3` | Días de retención de archivos en `historyFolder` |
 | `errorRetentionDays` | number | `15` | Días de retención de archivos en `errorFolder` |
-| `alertRetentionDays` | number | `1` | Días de retención de alertas no leídas en la carpeta `Alertas` |
 | `printMethod` | string | `"DIRECT"` | Modo de impresión global: `"DIRECT"` (RAW), `"GDI"` (GDI nativo con word-wrap) o `"CLASSIC"` (GDI+ VB). Por archivo: `43A` = DIRECT, `43I` = GDI, `43C` = Clásico/GDI+ VB |
 | `gdiTimeoutMs` | number | `60000` | (Modo GDI real `43I`) Timeout del worker thread en ms. Si el driver no responde, el worker se termina y el archivo sigue la lógica de reintentos/errores |
 | `classicTimeoutMs` | number | `60000` | (Modo CLÁSICO `43C`) Timeout de PowerShell en ms. Si el driver no responde, se finaliza el árbol de procesos y el archivo sigue la lógica de reintentos/errores |
@@ -66,11 +64,8 @@ Ejecutar `uninstall.bat` o el desinstalador de Windows como **Administrador**: e
 | `retryCount` | number | `3` | Reintentos adicionales ante fallo; use `0` para mover a `Errores` tras el primer fallo |
 | `retryIntervalMs` | number | `5000` | Intervalo entre reintentos en ms |
 | `strictStatusCheck` | boolean | `false` | `false` = tolerancia legacy: solo bloquean offline (`0x80`), error (`0x02`) y papel (`0x20`) — el resto de flags de estado se ignoran y el trabajo se envía al spooler. `true` = validación estricta con 14 flags `PRINTER_STATUS_*` (incluye `0x1000` "no disponible", pausa, atasco, tóner, etc.). Al bloquear, el error incluye `status=` en hex, puerto y flags reales de la cola |
-| `toastEnabled` | boolean | `true` | Habilitar notificaciones toast de Windows |
-| `toastOnSuccess` | boolean | `true` | Mostrar toast al imprimir exitosamente |
-| `toastOnError` | boolean | `true` | Mostrar toast al fallar impresión o parámetros inválidos |
 
-Las retenciones de Histórico, Errores y Alertas se revisan al iniciar el servicio y cada hora. Los archivos vencidos se eliminan según su fecha de modificación. `watchFolder` no se limpia automáticamente para no borrar trabajos pendientes; los logs conservan su limpieza diaria mediante `logRetentionDays`.
+Las retenciones de Histórico y Errores se revisan al iniciar el servicio y cada hora. Los archivos vencidos se eliminan según su fecha de modificación. `watchFolder` no se limpia automáticamente para no borrar trabajos pendientes; los logs conservan su limpieza diaria mediante `logRetentionDays`.
 
 ### `printers` — Configuración por tipo de documento
 
@@ -106,7 +101,7 @@ Rec~t9~fCourier_New~bN~pMTU-950~w40~43A.txt
 | `p` | `cPrinterName` | nombre de impresora destino | — |
 | `w` | `cAnchoMaximo` | `10`–`255` | `40` |
 | `43` | `cImpresionDirecta` | `A`=Directa, `I`=GDI, `C`=Clásico/GDI+ VB | `A` |
-| `44` | `cNotificacion` | `A`=Activa/Habilitada, `I`=Inactiva/Deshabilitada | Usa `toastEnabled` de config |
+| `44` | `cNotificacion` | `A`/`I` (aceptado por compatibilidad con Oracle Forms; se ignora) | — |
 
 Cuando un archivo incluye parámetros, estos tienen prioridad sobre `config.json`. Los nombres legacy sin `~` (ej: `Rec20260706_143022.txt`) usan solo la configuración del JSON.
 
@@ -169,102 +164,6 @@ Características:
 
 ---
 
-## Notificaciones al usuario
-
-El servicio notifica eventos clave al usuario mediante **archivos de alerta** y un **vigilante** que corre en la sesión del usuario.
-
-### Arquitectura de notificación
-
-```
-Servicio (Session 0)                    Vigilante (Session 3 - escritorio del usuario)
-     │                                            │
-     │  escribe archivo .txt                      │
-     ├─────── C:\Impresiones\Alertas\ ──────────►│  detecta archivo nuevo
-     │                                            │  lee contenido
-     │                                            │  muestra MessageBox nativo
-     │                                            │  elimina archivo
-```
-
-> **¿Por qué dos procesos?** Un Windows Service corre en Session 0 (escritorio invisible). Ninguna UI puede mostrarse desde ahí. El vigilante corre en la sesión del usuario y sirve de puente visual.
-
-### Componentes
-
-| Archivo | Ubicación | Función |
-|---|---|---|
-| `notifier.js` | `src/` | Escribe archivos `.txt` en la carpeta Alertas |
-| `cbs-alert-watcher.jar` | `scripts/` | Vigilante Java: monitorea Alertas, muestra MessageBox y elimina el archivo |
-| `install-alert-watcher.bat` | `scripts/` | Registra el vigilante Java en el Programador de tareas |
-
-### Eventos notificados
-
-| Evento | Título | Cuándo |
-|---|---|---|
-| Impresión OK | `CBS Print - Impresión exitosa` | Después de cada impresión exitosa |
-| Error de impresión | `CBS Print - Error de impresión` | Cuando se agotan los reintentos |
-| Parámetros inválidos | `CBS Print - Archivo inválido` | Nombre de archivo con parámetros incorrectos |
-| Error crítico | `CBS Print - Excepción no capturada` | Error no manejado del servicio |
-
-### Configuración
-
-En `config.json`:
-
-```json
-{
-  "toastEnabled":   true,
-  "toastOnSuccess": true,
-  "toastOnError":   true
-}
-```
-
-> `toastEnabled` controla si se escriben archivos de alerta en la carpeta Alertas.
-
-### Control por archivo (parámetro 44)
-
-Se puede sobreescribir el comportamiento por archivo usando el parámetro `44` en el nombre:
-
-```
-Rec~44A~contenido.txt      → Forzar notificación para este archivo
-Rec~44I~contenido.txt      → Deshabilitar notificación para este archivo
-Rec20260706_143022.txt     → Usa el valor de config.json
-```
-
-### Prioridad de resolución
-
-```
-44A/44I en archivo  >  toastEnabled en config.json  >  default: true
-```
-
-### Instalación del vigilante
-
-El vigilante se instala automáticamente durante la post-instalación. Para instalarlo manualmente:
-
-```batch
-C:\CBS\PrintService\scripts\install-alert-watcher.bat
-```
-
-El instalador exige Java 8 o superior en `PATH` o `JAVA_HOME`. El vigilante se inicia de inmediato y también en cada inicio de sesión.
-
-### Verificar el vigilante activo
-
-Ejecutar en PowerShell para comprobar que el vigilante Java está activo:
-
-```powershell
-$watchers = Get-CimInstance Win32_Process | Where-Object {
-  ($_.Name -eq 'java.exe' -or $_.Name -eq 'javaw.exe') -and
-  $_.CommandLine -like '*cbs-alert-watcher.jar*'
-}
-
-if ($watchers) {
-  $watchers | Select-Object ProcessId, Name, SessionId, CommandLine
-} else {
-  'El vigilante de alertas no está activo.'
-}
-```
-
-La salida debe mostrar un proceso `javaw.exe` o `java.exe` que ejecute `cbs-alert-watcher.jar`.
-
----
-
 ## Scripts del proyecto
 
 ### Batch files (raíz)
@@ -288,8 +187,6 @@ La salida debe mostrar un proceso `javaw.exe` o `java.exe` que ejecute `cbs-aler
 | `populate-printers.js` | Detecta impresora por defecto y la asigna a `printers.voucher.name` / `printers.slip.name` en `config.json` |
 | `apply-settings.js` | Aplica rutas de carpetas y migra `config.json` con los defaults de 3.2.5 |
 | `find-node.js` / `find-node.cmd` | Localiza Node.js (system PATH o bundled portable) |
-| `build-alert-watcher.bat` | Compila `java/AlertWatcher.java` en el JAR del vigilante para Java 8+ (requiere JDK 17+ en la máquina de build) |
-| `install-alert-watcher.bat` | Registra el vigilante Java para iniciar en la sesión del usuario |
 | `print-classic.ps1` | Helper del **modo CLÁSICO (43C)**: imprime con GDI+ `DrawString` (réplica del CBSprint.exe VB) vía `PrintDocument` |
 
 ### npm scripts (`package.json`)
@@ -318,8 +215,7 @@ npm run test:watch   # Modo watch
 | `tests/gdiPrinter.test.js` | Word-wrap, layout y anti-bloqueo del modo GDI real (43I): worker thread, timeout y guard PORTPROMPT |
 | `tests/classicPrinter.test.js` | Modo CLÁSICO (43C): args de PowerShell, codepage, localización del helper |
 | `tests/printer.test.js` | Resolución de impresora, envío al spooler |
-| `tests/configMigration.test.js` | Migración de configuraciones antiguas y defaults 3/15/1 |
-| `tests/notifier.test.js` | Notificaciones toast, resolución de parámetro 44 |
+| `tests/configMigration.test.js` | Migración de configuraciones antiguas y defaults 3/15 |
 
 ---
 
@@ -356,7 +252,6 @@ Verificar con: `status.bat` o `type C:\CBS\PrintService\healthcheck.json`.
 - Modo GDI real (43I) vía `gdi32.dll` con FFI — dependencia `koffi` (binario precompilado)
 - Servicio corre como `LocalSystem` (configurable desde SCM)
 - Sin fallback PowerShell: si el módulo nativo no está disponible, el trabajo se rechaza y sigue la lógica de reintentos/errores
-- Notificaciones via archivos (sin UI directa desde el servicio)
 - Cada impresión queda registrada en logs con timestamp, archivo, impresora, modo, copias y resultado
 
 ---
@@ -375,7 +270,8 @@ cbs-print-service/
 │   ├── classicPrinter.js    # Renderizado modo CLÁSICO 43C (GDI+ VB vía print-classic.ps1)
 │   ├── logger.js            # Logging rotativo (winston)
 │   ├── filenameParser.js    # Parseo de parámetros en nombre de archivo
-│   └── notifier.js          # Escritura de archivos de alerta para el vigilante
+│   ├── jobTracker.js        # Seguimiento/cancelación de trabajos en el spooler
+│   └── retentionCleaner.js  # Limpieza por retención de carpetas
 ├── scripts/                 # Scripts auxiliares
 │   ├── install-service.js
 │   ├── uninstall-service.js
@@ -384,16 +280,15 @@ cbs-print-service/
 │   ├── apply-settings.js
 │   ├── find-node.js
 │   ├── find-node.cmd
-│   ├── build-alert-watcher.bat   # Compila el vigilante Java
-│   └── install-alert-watcher.bat # Registra el vigilante Java
-├── java/
-│   └── AlertWatcher.java         # Vigilante Java de alertas visuales
+│   └── print-classic.ps1    # Helper del modo CLÁSICO (43C)
 ├── tests/                   # Tests unitarios
 │   ├── filenameParser.test.js
 │   ├── fileProcessor.test.js
 │   ├── gdiPrinter.test.js
+│   ├── classicPrinter.test.js
 │   ├── printer.test.js
-│   └── notifier.test.js
+│   ├── jobTracker.test.js
+│   └── configMigration.test.js
 ├── dist/                    # Instalador generado (build.bat)
 ├── config.json              # Configuración (NO sobreescrita en updates)
 ├── config.example.json      # Plantilla de ejemplo
@@ -432,13 +327,7 @@ CBS Print Service (Session 0)
   │      ▼
   │    historyFolder (MOVE) o eliminación (DELETE)
   │
-  └──► C:\Impresiones\Alertas\ (archivo .txt)
-         │
-         ▼
-        cbs-alert-watcher.jar (Session 3 - escritorio del usuario)
-         │ detecta archivo
-         ▼
-       MessageBox nativo de Windows
+  └──► Logs (winston: INFO/WARN/ERROR por evento)
 ```
 
 ---
@@ -478,3 +367,5 @@ CBS Print Service (Session 0)
 | 3.2.5 | Oct 2026 | Se elimina el uso de WMI (`wmic` y `Get-CimInstance Win32_Process`) durante la instalación y desinstalación del vigilante de alertas, evitando bloqueos y eventos 4662 en equipos con WMI lento o auditado. Se elimina el fallback PowerShell no funcional; la impresión RAW requiere el módulo nativo. La actualización migra configuraciones antiguas (timeouts de 5 s a 60 s y nuevos flags anti-bloqueo). El watcher iniciado manualmente fuera de la tarea ya no se detiene automáticamente. |
 | 3.2.6 | Oct 2026 | Desinstalador completo: `scripts/uninstall-cleanup.ps1` elimina servicio, tareas, árbol de procesos, fuentes de Event Log, RunOnce, `C:\ProgramData\CBSPrintService`, archivos generados y las carpetas de impresión configuradas (`watchFolder`, `historyFolder`, `errorFolder`, `logFolder` y `Alertas`), con protección contra rutas peligrosas. `uninstall.bat` usa la misma limpieza y elimina `C:\CBS\PrintService` en segundo plano. Bump de versión a 3.2.6. |
 | 3.2.7 | Nov 2026 | **Tolerancia configurable del estado de impresora** (`strictStatusCheck`, default `false`): restaura el comportamiento de v3.2.2 donde solo bloqueaban offline (`0x80`), error (`0x02`) y papel (`0x20`); la lista estricta de 14 flags `PRINTER_STATUS_*` (incluye `0x1000` "no disponible", que causaba el fallo en campo) queda opcional con `true`. El error de bloqueo ahora incluye diagnóstico real (`status=` hex, puerto, driver, flags de estado y atributos). `config.json` por defecto vuelve a `retryCount: 3`. `diagnostico.js` muestra puerto/driver/flags por impresora y el modo de verificación activo. Tests nuevos de `evaluateStatus`. Bump de versión a 3.2.7. |
+| 3.2.8 | Nov 2026 | **Se elimina el sistema de alertas Java**: vigilante `cbs-alert-watcher.jar`, carpeta `Alertas`, `notifier.js`, claves `toast*`/`alertRetentionDays` y tarea `CBSAlertWatcher`. Los eventos quedan solo en logs (winston). El parámetro `44` sigue aceptándose por compatibilidad con Oracle Forms pero se ignora. Los desinstaladores conservan la eliminación de la tarea `CBSAlertWatcher` para migrar equipos existentes. Se elimina el requisito de Java/JDK. Bump de versión a 3.2.8. |
+| 3.2.9 | Nov 2026 | `update.bat` elimina la tarea huérfana `\CBS Print Service\CBSAlertWatcher` y el `cbs-alert-watcher.jar` residual durante la actualización, para que equipos actualizados en sitio no queden con el vigilante Java corriendo. Bump de versión a 3.2.9. |

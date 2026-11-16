@@ -4,7 +4,7 @@ const path = require('path');
 
 const PARAM_DEFS = [
   { code: '43', key: 'cImpresionDirecta', desc: 'Tipo de impresión (A=Activo/Directa, I=Inactivo/GDI, C=Clásica/GDI+ VB)', defaultValue: 'A' },
-  { code: '44', key: 'cNotificacion',    desc: 'Notificación toast (A=Activo/Habilitado, I=Inactivo/Deshabilitado)', defaultValue: null },
+  { code: '44', key: 'cNotificacion',    desc: 'Notificación (deprecated; aceptado y ignorado)', defaultValue: null },
   { code: 'p',  key: 'cPrinterName',      desc: 'Nombre de la impresora destino',              defaultValue: null },
   { code: 'w',  key: 'cAnchoMaximo',      desc: 'Ancho máximo de caracteres por línea',        defaultValue: '40' },
   { code: 't',  key: 'cTamañoLetra',      desc: 'Tamaño de la fuente',                         defaultValue: '9' },

@@ -3,7 +3,6 @@
 const DEFAULTS = {
   historyRetentionDays: 3,
   errorRetentionDays: 15,
-  alertRetentionDays: 1,
   gdiTimeoutMs: 60000,
   classicTimeoutMs: 60000,
   directTimeoutMs: 60000,

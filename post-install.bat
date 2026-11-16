@@ -41,10 +41,4 @@ if errorlevel 1 (
     echo [%DATE% %TIME%] Servicio en RUNNING. >> install.log 2>&1
 )
 
-echo [%DATE% %TIME%] Instalando vigilante de alertas... >> install.log 2>&1
-call scripts\install-alert-watcher.bat >> install.log 2>&1
-if errorlevel 1 (
-    echo [%DATE% %TIME%] AVISO: no se instalo el vigilante de alertas. >> install.log 2>&1
-)
-
 echo [%DATE% %TIME%] Instalacion completada >> install.log 2>&1

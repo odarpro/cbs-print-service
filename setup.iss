@@ -14,7 +14,7 @@
 ; =============================================================================
 
 #define MyAppName      "CBS Print Service"
-#define MyAppVersion   "3.2.7"
+#define MyAppVersion   "3.2.9"
 #define MyAppPublisher  "CBS"
 #define MyAppURL       ""
 #define MyExeName      "CBSPrintService.exe"
@@ -56,9 +56,6 @@ Source: "bin\*";                       DestDir: "{app}\bin";          Flags: ign
 ; Scripts
 Source: "scripts\*";                   DestDir: "{app}\scripts";      Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Código Java del vigilante de alertas
-Source: "java\*";                      DestDir: "{app}\java";         Flags: ignoreversion recursesubdirs createallsubdirs
-
 ; Tests
 Source: "tests\*";                     DestDir: "{app}\tests";        Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -88,7 +85,6 @@ Name: "{code:GetWatchFolder}\Logs";     Permissions: users-modify
 Name: "{code:GetWatchFolder}";         Permissions: users-modify
 Name: "{code:GetHistoryFolder}";       Permissions: users-modify
 Name: "{code:GetErrorFolder}";         Permissions: users-modify
-Name: "{code:GetAlertFolder}";         Permissions: users-modify
 
 ; [Run] — Eliminado intencionalmente.
 ; La post-instalación se ejecuta desde CurStepChanged(ssPostInstall)
@@ -192,14 +188,6 @@ begin
     Result := ConfigPage.Values[2]
   else
     Result := 'D:\Impresiones\Errores';
-end;
-
-function GetAlertFolder(Param: string): string;
-begin
-  if ConfigPage <> nil then
-    Result := ConfigPage.Values[0] + '\Alertas'
-  else
-    Result := 'D:\Impresiones\Alertas';
 end;
 
 function JsonStr(const S: string): string;

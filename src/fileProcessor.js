@@ -18,7 +18,6 @@ const path           = require('path');
 const logger         = require('./logger');
 const printer        = require('./printer');
 const filenameParser = require('./filenameParser');
-const notifier       = require('./notifier');
 const jobTracker     = require('./jobTracker');
 
 // ---------------------------------------------------------------------------
@@ -332,9 +331,6 @@ class FileProcessor {
           errors: validation.errors
         });
 
-        const parsedParams = parsed && parsed.params ? parsed.params : null;
-        notifier.notifyInvalidFile(fileName, validation.errors, parsedParams);
-
         this._moveToError(filePath, `Parámetros inválidos: ${validation.errors.join('; ')}`, {
           stage:    'validacion',
           docType,
@@ -372,8 +368,6 @@ class FileProcessor {
 
     if (!content || content.trim().length === 0) {
       log.warn('Archivo vacío, moviendo a errores', { filePath: contentFilePath });
-      const parsedParams = parsed && parsed.params ? parsed.params : null;
-      notifier.notifyPrintError(fileName, 'Archivo vacío', parsedParams);
       this._moveToError(filePath, 'Archivo vacío', {
         stage:    'lectura',
         docType,
@@ -393,8 +387,6 @@ class FileProcessor {
     const resolvedPrinterName = (parsed && parsed.params.p) || printerCfg.name;
     if (!resolvedPrinterName) {
       log.error('No hay impresora configurada para el tipo de documento', { docType });
-      const parsedParams = parsed && parsed.params ? parsed.params : null;
-      notifier.notifyPrintError(fileName, 'Sin impresora configurada', parsedParams);
       this._moveToError(filePath, 'Sin impresora configurada', {
         stage:    'configuracion',
         docType,
@@ -502,9 +494,6 @@ class FileProcessor {
           attempt
         });
 
-        const parsedParams = parsed && parsed.params ? parsed.params : null;
-        notifier.notifyPrintSuccess(fileName, resolvedPrinterName, parsedParams);
-
         this._postProcess(filePath);
         return;
 
@@ -548,9 +537,6 @@ class FileProcessor {
       error:         finalError,
       detalleIntentos: attemptErrors
     });
-
-    const parsedParams = parsed && parsed.params ? parsed.params : null;
-    notifier.notifyPrintError(fileName, finalError, parsedParams);
 
     this._moveToError(filePath, finalError, {
       stage:            'impresion',

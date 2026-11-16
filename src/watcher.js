@@ -134,15 +134,6 @@ class FolderWatcher {
         logger.get().info(`Carpeta creada: ${dir}`);
       }
     }
-
-    // Crear carpeta de alertas (fallback para notificaciones)
-    if (cfg.logFolder) {
-      const alertDir = path.join(path.dirname(cfg.logFolder), 'Alertas');
-      if (!fs.existsSync(alertDir)) {
-        fs.mkdirSync(alertDir, { recursive: true });
-        logger.get().info(`Carpeta creada: ${alertDir}`);
-      }
-    }
   }
 
   /**
@@ -217,12 +208,7 @@ class FolderWatcher {
     const cfg = this.config;
     const folders = [
       { name: 'Histórico', dir: cfg.historyFolder, days: normalizeRetentionDays(cfg.historyRetentionDays, 3) },
-      { name: 'Errores', dir: cfg.errorFolder, days: normalizeRetentionDays(cfg.errorRetentionDays, 15) },
-      {
-        name: 'Alertas',
-        dir: cfg.logFolder ? path.join(path.dirname(cfg.logFolder), 'Alertas') : null,
-        days: normalizeRetentionDays(cfg.alertRetentionDays, 1)
-      }
+      { name: 'Errores', dir: cfg.errorFolder, days: normalizeRetentionDays(cfg.errorRetentionDays, 15) }
     ];
 
     for (const folder of folders) {
