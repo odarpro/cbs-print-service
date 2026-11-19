@@ -204,7 +204,7 @@ async function bootstrap() {
   }
 
   appLog('info', '============================================================');
-  appLog('info', 'CBS Print Service  v3.2.9  arrancando...');
+  appLog('info', 'CBS Print Service  v3.3.0  arrancando...');
   appLog('info', '============================================================');
   appLog('info', 'Configuración cargada', { configPath: CONFIG_PATH });
 

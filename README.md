@@ -31,7 +31,7 @@ Servicio de Windows (Node.js) que reemplaza `CBSprint.exe` (VB). Monitorea `watc
 
 ### Instalador distribuible (build)
 1. Ejecutar `build.bat` como **Administrador** (requiere Node.js, Python, VS Build Tools e Inno Setup — se auto-instalan).
-2. Genera `dist\CBSPrintService_3.2.9_Setup.exe`.
+2. Genera `dist\CBSPrintService_3.3.0_Setup.exe`.
 3. En máquinas destino ejecutar: `setup.exe /VERYSILENT` (GPO/SCCM: `/VERYSILENT /SUPPRESSMSGBOXES`).
 
 ### Actualización
@@ -64,6 +64,10 @@ Ejecutar `uninstall.bat` o el desinstalador de Windows como **Administrador**: e
 | `retryCount` | number | `3` | Reintentos adicionales ante fallo; use `0` para mover a `Errores` tras el primer fallo |
 | `retryIntervalMs` | number | `5000` | Intervalo entre reintentos en ms |
 | `strictStatusCheck` | boolean | `false` | `false` = tolerancia legacy: solo bloquean offline (`0x80`), error (`0x02`) y papel (`0x20`) — el resto de flags de estado se ignoran y el trabajo se envía al spooler. `true` = validación estricta con 14 flags `PRINTER_STATUS_*` (incluye `0x1000` "no disponible", pausa, atasco, tóner, etc.). Al bloquear, el error incluye `status=` en hex, puerto y flags reales de la cola |
+| `recoverPrintersOnBoot` | boolean | `true` | CBSBootGuard intenta recuperar las impresoras configuradas que queden Offline/NotAvailable/Pausada tras un reinicio. **Nunca impide arrancar el servicio**: si la recuperación falla, el servicio arranca igualmente |
+| `printerRecoveryAttempts` | number | `6` | Intentos de re-verificación de estado durante la recuperación (con `printerRecoveryIntervalMs` entre cada uno) |
+| `printerRecoveryIntervalMs` | number | `5000` | Espera entre intentos de recuperación (deja tiempo a que el puerto USB se enumere) |
+| `restartSpoolerIfOffline` | boolean | `true` | Si tras agotar los intentos la cola sigue Offline, reinicia el Spooler una vez como último recurso |
 
 Las retenciones de Histórico y Errores se revisan al iniciar el servicio y cada hora. Los archivos vencidos se eliminan según su fecha de modificación. `watchFolder` no se limpia automáticamente para no borrar trabajos pendientes; los logs conservan su limpieza diaria mediante `logRetentionDays`.
 
@@ -369,3 +373,4 @@ CBS Print Service (Session 0)
 | 3.2.7 | Nov 2026 | **Tolerancia configurable del estado de impresora** (`strictStatusCheck`, default `false`): restaura el comportamiento de v3.2.2 donde solo bloqueaban offline (`0x80`), error (`0x02`) y papel (`0x20`); la lista estricta de 14 flags `PRINTER_STATUS_*` (incluye `0x1000` "no disponible", que causaba el fallo en campo) queda opcional con `true`. El error de bloqueo ahora incluye diagnóstico real (`status=` hex, puerto, driver, flags de estado y atributos). `config.json` por defecto vuelve a `retryCount: 3`. `diagnostico.js` muestra puerto/driver/flags por impresora y el modo de verificación activo. Tests nuevos de `evaluateStatus`. Bump de versión a 3.2.7. |
 | 3.2.8 | Nov 2026 | **Se elimina el sistema de alertas Java**: vigilante `cbs-alert-watcher.jar`, carpeta `Alertas`, `notifier.js`, claves `toast*`/`alertRetentionDays` y tarea `CBSAlertWatcher`. Los eventos quedan solo en logs (winston). El parámetro `44` sigue aceptándose por compatibilidad con Oracle Forms pero se ignora. Los desinstaladores conservan la eliminación de la tarea `CBSAlertWatcher` para migrar equipos existentes. Se elimina el requisito de Java/JDK. Bump de versión a 3.2.8. |
 | 3.2.9 | Nov 2026 | `update.bat` elimina la tarea huérfana `\CBS Print Service\CBSAlertWatcher` y el `cbs-alert-watcher.jar` residual durante la actualización, para que equipos actualizados en sitio no queden con el vigilante Java corriendo. Bump de versión a 3.2.9. |
+| 3.3.0 | Nov 2026 | **Recuperación de impresoras al arranque** en CBSBootGuard: tras reinicio, si las colas configuradas quedan Offline/NotAvailable/Pausada, se limpia el flag WorkOffline (`0x400`), se reanuda la cola si está en pausa y se espera a que el puerto USB se enumere (`printerRecoveryAttempts` × `printerRecoveryIntervalMs`); como último recurso se reinicia el Spooler una vez (`restartSpoolerIfOffline`). Nuevo módulo `src/printerRecovery.js` y tests. **El servicio siempre arranca**: la recuperación es no bloqueante y un fallo total no impide `ensureServiceRunning`. Bump de versión a 3.3.0. |

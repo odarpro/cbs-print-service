@@ -7,7 +7,11 @@
 //   2. Espera a que el disco/carpeta de trabajo esté disponible.
 //   3. Limpia trabajos CBS huérfanos del spooler.
 //   4. Elimina .txt pendientes (Rec*/Val*) del watchFolder.
-//   5. Arranca el servicio CBSPrintService si no está RUNNING.
+//   5. Recupera impresoras Offline/NotAvailable/Pausada (no bloqueante).
+//   6. Arranca el servicio CBSPrintService si no está RUNNING.
+//
+// El paso 5 NUNCA impide llegar al paso 6: el servicio debe quedar arriba
+// aunque la recuperación de impresoras falle por completo.
 //
 // Log: C:\ProgramData\CBSPrintService\boot-guard.log
 // =============================================================================
@@ -16,6 +20,7 @@ const fs   = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const jobTracker = require('../src/jobTracker');
+const printerRecovery = require('../src/printerRecovery');
 
 const SERVICE_KEY = 'cbsprintservice';
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
@@ -240,8 +245,32 @@ async function main() {
     await waitForWatchFolder(config.watchFolder);
     cleanupStaleJobs(config);
     deletePendingFiles(config);
+
+    // Paso 5: recuperar impresoras Offline. Nunca lanza; no bloquea el paso 6.
+    try {
+      const recovery = await printerRecovery.recoverPrinters(config, {
+        log,
+        sleep,
+        jobTracker
+      });
+      if (recovery && !recovery.skipped) {
+        log('Recuperación de impresoras: resumen', {
+          checked: recovery.checked,
+          recovered: recovery.recovered,
+          stillOffline: recovery.stillOffline,
+          spoolerRestarted: recovery.spoolerRestarted,
+          attempts: recovery.attempts,
+          errors: recovery.errors
+        });
+      }
+    } catch (err) {
+      log('Recuperación de impresoras: error inesperado (no bloquea el arranque)', {
+        error: err.message
+      });
+    }
   }
 
+  // Paso 6: SIEMPRE se intenta (aunque el paso 5 haya fallado).
   await ensureServiceRunning();
   log('Boot-guard finalizado');
 }

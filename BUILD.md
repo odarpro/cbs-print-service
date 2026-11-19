@@ -28,12 +28,12 @@ El script:
 4. Instala Inno Setup si no existe
 5. Ejecuta `npm install`
 6. Ejecuta `npm test`
-7. Genera `dist\CBSPrintService_3.2.9_Setup.exe`
+7. Genera `dist\CBSPrintService_3.3.0_Setup.exe`
 
 ## InstalaciÃ³n silenciosa (SCCM / GPO)
 
 ```batch
-CBSPrintService_3.2.9_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="C:\cbs_install.log"
+CBSPrintService_3.3.0_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="C:\cbs_install.log"
 ```
 
 ## Despliegue masivo
@@ -43,7 +43,7 @@ CBSPrintService_3.2.9_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="C:\cbs_insta
 2. Tipo: Script de instalaciÃ³n de Windows
 3. Comando de instalaciÃ³n:
    ```
-CBSPrintService_3.2.9_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
+CBSPrintService_3.3.0_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
    ```
 4. DetecciÃ³n: `ProductCode {B8F4A3D2-1E5C-4A7B-9D6F-8C2E3F1A5B7D}`
 
@@ -52,12 +52,12 @@ CBSPrintService_3.2.9_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
 2. Crear GPO â†’ ConfiguraciÃ³n del equipo â†’ Scripts de inicio
 3. Agregar script:
    ```batch
-   \\domain\NETLOGON\CBS\CBSPrintService_3.2.9_Setup.exe /VERYSILENT
+   \\domain\NETLOGON\CBS\CBSPrintService_3.3.0_Setup.exe /VERYSILENT
    ```
 
 ### OpciÃ³n 3: PDQ / Lanzadores
 ```batch
-CBSPrintService_3.2.9_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="%TEMP%\cbs_install.log"
+CBSPrintService_3.3.0_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG="%TEMP%\cbs_install.log"
 ```
 
 ## Notas

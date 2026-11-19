@@ -17,6 +17,11 @@
   "cleanupLegacyCbsJobs": true,
   "strictStatusCheck":   false,
 
+  "recoverPrintersOnBoot": true,
+  "printerRecoveryAttempts": 6,
+  "printerRecoveryIntervalMs": 5000,
+  "restartSpoolerIfOffline": true,
+
   "printers": {
     "voucher": {
       "name":            "EPSON TM-U950",

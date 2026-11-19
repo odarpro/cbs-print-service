@@ -10,7 +10,13 @@ const DEFAULTS = {
   cleanupLegacyCbsJobs: true,
   // false = tolerancia legacy (solo offline/error/papelería bloquean);
   // true  = lista estricta de 14 flags PRINTER_STATUS_*.
-  strictStatusCheck: false
+  strictStatusCheck: false,
+  // Recuperación de impresoras Offline/NotAvailable/Pausada al arranque
+  // (CBSBootGuard). Nunca impide arrancar el servicio.
+  recoverPrintersOnBoot: true,
+  printerRecoveryAttempts: 6,
+  printerRecoveryIntervalMs: 5000,
+  restartSpoolerIfOffline: true
 };
 
 const LEGACY_TIMEOUT_MS = 5000;
